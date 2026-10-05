@@ -1,0 +1,21 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels"
+        x:Class="WirelessSecurityAnalyzer.App.Views.MainWindow" x:DataType="vm:MainWindowViewModel"
+        Title="Wireless Security Analyzer" Width="1280" Height="800" MinWidth="1000" MinHeight="620">
+  <Grid ColumnDefinitions="216,*">
+    <Border Background="{DynamicResource SidebarBrush}" Padding="16,28">
+      <Grid RowDefinitions="Auto,Auto,*,Auto">
+        <TextBlock Text="WIRELESS" FontSize="21" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
+        <TextBlock Grid.Row="1" Text="Security Analyzer" Classes="subtitle" Margin="0,6,0,28" />
+        <ListBox Grid.Row="2" ItemsSource="{Binding Navigation}" SelectedItem="{Binding SelectedNavigation}"
+                 Background="Transparent" SelectionMode="Single">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:NavigationItem"><TextBlock Text="{Binding Title}" Margin="8,10" FontSize="16" /></DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock Grid.Row="3" Text="Wi-Fi Analyzer · этап 1&#10;Локальная обработка данных" Classes="subtitle" FontSize="12" />
+      </Grid>
+    </Border>
+    <ContentControl Grid.Column="1" Content="{Binding CurrentPage}" Margin="28" />
+  </Grid>
+</Window>

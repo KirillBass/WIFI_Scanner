@@ -1,0 +1,48 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels" xmlns:controls="using:WirelessSecurityAnalyzer.App.Controls"
+             x:Class="WirelessSecurityAnalyzer.App.Views.AccessPointsView" x:DataType="vm:AccessPointsViewModel">
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="16">
+    <StackPanel Spacing="7"><TextBlock Text="Эфир" Classes="title" /><TextBlock Text="Доступные точки доступа · Windows Native Wi-Fi" Classes="subtitle" /><TextBlock Text="{Binding AdapterText}" Classes="subtitle" /></StackPanel>
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+      <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+      <Button Grid.Column="1" Content="Сканировать" Classes="primary" Command="{Binding ScanCommand}" />
+      <Button Grid.Column="2" Content="Отмена" Command="{Binding ScanCancelCommand}" IsVisible="{Binding IsBusy}" />
+    </Grid>
+    <Border Grid.Row="2" Classes="card" IsVisible="{Binding HasError}" BorderBrush="{DynamicResource ErrorBrush}" Padding="14">
+      <StackPanel Spacing="10"><TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" Foreground="{DynamicResource ErrorBrush}" />
+        <Button Content="Открыть параметры местоположения" Command="{Binding OpenLocationSettingsCommand}" IsVisible="{Binding IsLocationPermissionRequired}" />
+      </StackPanel>
+    </Border>
+    <Grid Grid.Row="3" ColumnDefinitions="*,170,Auto" ColumnSpacing="12">
+      <TextBox PlaceholderText="Поиск по SSID или BSSID" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+      <ComboBox Grid.Column="1" ItemsSource="{Binding BandFilters}" SelectedIndex="{Binding SelectedBandIndex}" HorizontalAlignment="Stretch" />
+      <CheckBox Grid.Column="2" Content="Сильные сверху" IsChecked="{Binding StrongestFirst}" />
+    </Grid>
+    <Border Grid.Row="4" Classes="card" Padding="0" ClipToBounds="True">
+      <Grid>
+        <TableView ItemsSource="{Binding AccessPoints}" CanUserResizeColumns="True">
+          <TableView.Columns>
+            <TableViewColumn Header="SSID" Binding="{ReflectionBinding Ssid}" Width="2*" />
+            <TableViewColumn Header="BSSID" Binding="{ReflectionBinding Bssid}" Width="165" />
+            <TableViewColumn Header="RSSI / сигнал" Width="140">
+              <TableViewColumn.CellTemplate><DataTemplate x:DataType="vm:AccessPointRowViewModel"><controls:SignalStrengthControl RssiDbm="{Binding RssiDbm}" /></DataTemplate></TableViewColumn.CellTemplate>
+            </TableViewColumn>
+            <TableViewColumn Header="Канал" Binding="{ReflectionBinding Channel}" Width="65" />
+            <TableViewColumn Header="Диапазон" Binding="{ReflectionBinding Band}" Width="100" />
+            <TableViewColumn Header="Частота" Binding="{ReflectionBinding Frequency}" Width="115" />
+            <TableViewColumn Header="Обнаружена" Binding="{ReflectionBinding LastSeen}" Width="145" />
+          </TableView.Columns>
+        </TableView>
+        <StackPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" Margin="24">
+          <TextBlock Text="Нет точек доступа для отображения" HorizontalAlignment="Center" FontSize="18" />
+          <TextBlock Text="Выполните сканирование или измените фильтры." Classes="subtitle" HorizontalAlignment="Center" />
+        </StackPanel>
+      </Grid>
+    </Border>
+    <Grid Grid.Row="5" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
+      <ProgressBar Grid.ColumnSpan="2" IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="3" />
+      <TextBlock Grid.Row="1" Text="{Binding LastScanText}" Classes="subtitle" />
+      <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TotalCount, StringFormat='Всего BSS: {0}'}" Classes="subtitle" />
+    </Grid>
+  </Grid>
+</UserControl>

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../WirelessSecurityAnalyzer.Core/WirelessSecurityAnalyzer.Core.csproj" />
+    <PackageReference Include="Serilog" />
+    <InternalsVisibleTo Include="WirelessSecurityAnalyzer.Windows.Tests" />
+  </ItemGroup>
+</Project>

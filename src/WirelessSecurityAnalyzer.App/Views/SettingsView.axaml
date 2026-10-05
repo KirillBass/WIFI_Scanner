@@ -1,0 +1,9 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels" x:Class="WirelessSecurityAnalyzer.App.Views.SettingsView" x:DataType="vm:SettingsViewModel">
+  <StackPanel Spacing="20">
+    <TextBlock Text="Настройки" Classes="title" />
+    <Border Classes="card"><StackPanel Spacing="12"><TextBlock Text="Разрешения Windows" FontSize="18" /><TextBlock Text="Для доступа к BSSID и окружающим сетям Windows может требовать разрешение определения местоположения. Включите его для классических приложений." Classes="subtitle" /><Button Content="Открыть параметры местоположения" Command="{Binding AccessPoints.OpenLocationSettingsCommand}" HorizontalAlignment="Left" /></StackPanel></Border>
+    <Border Classes="card"><StackPanel Spacing="12"><TextBlock Text="Локальные журналы" FontSize="18" /><TextBlock Text="{Binding LogsDirectory}" TextWrapping="Wrap" /><TextBlock Text="Сохраняются 14 последних файлов журналов. Данные сетей и журналы не отправляются в интернет." Classes="subtitle" /></StackPanel></Border>
+    <TextBlock Text="Интервал автоматического мониторинга появится на втором этапе." Classes="subtitle" />
+  </StackPanel>
+</UserControl>

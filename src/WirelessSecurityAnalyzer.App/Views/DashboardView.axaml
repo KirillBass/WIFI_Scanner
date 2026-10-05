@@ -1,0 +1,15 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels" x:Class="WirelessSecurityAnalyzer.App.Views.DashboardView" x:DataType="vm:DashboardViewModel">
+  <StackPanel Spacing="22">
+    <TextBlock Text="Обзор" Classes="title" />
+    <TextBlock Text="Сводка последнего успешного сканирования" Classes="subtitle" />
+    <UniformGrid Columns="4">
+      <Border Classes="card" Margin="0,0,12,0"><StackPanel Spacing="10"><TextBlock Text="Все BSS" Classes="subtitle" /><TextBlock Text="{Binding AccessPoints.TotalCount}" FontSize="34" /></StackPanel></Border>
+      <Border Classes="card" Margin="0,0,12,0"><StackPanel Spacing="10"><TextBlock Text="2,4 ГГц" Classes="subtitle" /><TextBlock Text="{Binding AccessPoints.Ghz24Count}" FontSize="34" /></StackPanel></Border>
+      <Border Classes="card" Margin="0,0,12,0"><StackPanel Spacing="10"><TextBlock Text="5 ГГц" Classes="subtitle" /><TextBlock Text="{Binding AccessPoints.Ghz5Count}" FontSize="34" /></StackPanel></Border>
+      <Border Classes="card"><StackPanel Spacing="10"><TextBlock Text="6 ГГц" Classes="subtitle" /><TextBlock Text="{Binding AccessPoints.Ghz6Count}" FontSize="34" /></StackPanel></Border>
+    </UniformGrid>
+    <Border Classes="card"><StackPanel Spacing="12"><TextBlock Text="Wi-Fi адаптеры" FontSize="18" /><TextBlock Text="{Binding AccessPoints.AdapterText}" TextWrapping="Wrap" /><TextBlock Text="{Binding AccessPoints.StatusText}" Classes="subtitle" /><Button Content="Сканировать эфир" Command="{Binding AccessPoints.ScanCommand}" HorizontalAlignment="Left" /></StackPanel></Border>
+    <TextBlock Text="Мониторинг сигнала, оценка каналов и поиск устройств будут добавлены после проверки базового сканера на Windows." Classes="subtitle" />
+  </StackPanel>
+</UserControl>
