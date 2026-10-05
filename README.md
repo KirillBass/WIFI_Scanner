@@ -19,13 +19,12 @@ Desktop-приложение на C# / .NET 10 / Avalonia 12.1.3 для анал
 ```powershell
 dotnet restore WirelessSecurityAnalyzer.sln
 dotnet build WirelessSecurityAnalyzer.sln --no-restore
-dotnet test WirelessSecurityAnalyzer.sln --no-build
 dotnet run --project src/WirelessSecurityAnalyzer.App
 ```
 
 Версии пакетов зафиксированы в `Directory.Packages.props`; каждый проект содержит `packages.lock.json`. Для воспроизводимой проверки зависимостей используйте `dotnet restore --locked-mode`.
 
-На Linux можно собрать solution и выполнить Core, managed interop и headless UI tests. Вызов `wlanapi.dll` на Linux недоступен: приложение показывает сообщение о неподдерживаемой платформе и не подменяет данные демонстрационными. SDK для текущей Linux-среды установлен в `/home/galkin/.local/share/wsa-dotnet`; для этой машины можно добавить каталог в PATH или вызвать `dotnet` по полному пути. Этот путь не используется приложением.
+На Linux можно собрать solution. Вызов `wlanapi.dll` на Linux недоступен: приложение показывает сообщение о неподдерживаемой платформе и не подменяет данные демонстрационными.
 
 Публикация для Windows:
 
@@ -56,11 +55,7 @@ src/
     Models/, Interfaces/, Analysis/, Common/
   WirelessSecurityAnalyzer.Infrastructure.Windows/ # net10.0-windows: Native Wi-Fi
     NativeWifi/, Wifi/, Interop/, Services/
-tests/
-  WirelessSecurityAnalyzer.Core.Tests/
-  WirelessSecurityAnalyzer.Windows.Tests/
 docs/
-  WINDOWS_VALIDATION.md
   IMPLEMENTATION_STATUS.md
 ```
 
@@ -81,19 +76,9 @@ ObservableCollection существует только в UI. Результат
 
 ## Проверки
 
-Core tests проверяют преобразования частоты ↔ канала для 2,4/5/6 ГГц, канал 14, специальный канал 2 на 5935 МГц и некорректные/граничные значения. Таблица преобразований не является перечнем каналов, разрешённых в конкретной стране.
+Тестирование выполняется локально, результаты сообщаются в чате. Тестовые проекты, настройки тестовых зависимостей и автоматические проверки GitHub не входят в публикуемый проект.
 
-Windows.Tests содержит проверки ABI структур, преобразования BSS, ошибок Win32, завершения/ошибки/тайм-аута/отмены callback, а также headless-проверки окна, навигации, фильтров, повторного scan и сохранения данных при ошибке. Детерминированный fake scanner находится только в тестовом проекте; production DI всегда регистрирует WindowsWifiScanner.
-
-Аппаратный интеграционный тест по умолчанию пропускается. На Windows с Wi-Fi адаптером и разрешениями его можно явно включить:
-
-```powershell
-$env:WSA_RUN_WIFI_INTEGRATION_TESTS = '1'
-dotnet test tests/WirelessSecurityAnalyzer.Windows.Tests --filter Category=WindowsIntegration
-Remove-Item Env:WSA_RUN_WIFI_INTEGRATION_TESTS
-```
-
-Если ОС или Wi-Fi адаптер не поддерживаются, тест пропускается. При явном включении ошибки службы/разрешений должны быть устранены до проверки. Ручной чек-лист: [docs/WINDOWS_VALIDATION.md](docs/WINDOWS_VALIDATION.md).
+Реальное сканирование WLAN и поведение драйверов требуют проверки на Windows с Wi-Fi адаптером. Таблица преобразования частот и каналов не является перечнем каналов, разрешённых в конкретной стране.
 
 ## Данные и ограничения
 

@@ -5,6 +5,5 @@
   <ItemGroup>
     <ProjectReference Include="../WirelessSecurityAnalyzer.Core/WirelessSecurityAnalyzer.Core.csproj" />
     <PackageReference Include="Serilog" />
-    <InternalsVisibleTo Include="WirelessSecurityAnalyzer.Windows.Tests" />
   </ItemGroup>
 </Project>

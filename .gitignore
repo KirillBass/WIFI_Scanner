@@ -9,3 +9,8 @@ publish/
 Logs/
 artifacts/
 .DS_Store
+
+# Local verification stays on this workstation.
+/tests/
+/docs/WINDOWS_VALIDATION.md
+/.github/workflows/build.yml

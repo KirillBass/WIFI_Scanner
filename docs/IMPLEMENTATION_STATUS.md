@@ -4,18 +4,16 @@
 
 ## Первый этап — код реализован, аппаратная проверка ожидается
 
-- Создан `WirelessSecurityAnalyzer.sln` с тремя production-проектами и двумя тестовыми проектами.
+- Создан `WirelessSecurityAnalyzer.sln` с тремя проектами приложения. Тестирование ведётся локально, результаты сообщаются в чате.
 - Core: immutable модели WifiAccessPoint и WifiAdapter, WifiBand, интерфейсы сканера/адаптеров, структурированные ошибки, преобразование частот и каналов.
 - Infrastructure.Windows: P/Invoke WLAN API, ABI-структуры, SafeHandle, освобождение native memory, callback с удержанием delegate, TaskCompletionSource, отмена и тайм-аут.
 - WindowsWifiScanner: реальные BSS, несколько адаптеров, объединение по BSSID, последовательное выполнение сканирований, локальное логирование.
 - App: Avalonia 12.1.3, MVVM на CommunityToolkit, DI, русскоязычная тёмная тема, sidebar, шесть страниц навигации, ручной scan, TableView, индикатор RSSI, поиск/фильтры/сортировка, отмена, loading/empty/error states и переход к Location settings.
-- README, Windows validation checklist, профиль self-contained Windows x64 и CI для Windows/Linux.
+- README и профиль self-contained Windows x64.
 
-Результат первичной проверки в Linux: `dotnet restore` и `dotnet build` прошли; build без ошибок и предупреждений. `dotnet test`: 57 passed, 1 skipped (Native WLAN integration требует Windows). Headless-тест подтвердил загрузку MainWindow, TableView и всех шести страниц, обновление строк, фильтры, обработку отказа доступа и отмену.
+Профиль публикации собирает self-contained приложение Windows x64 с включённым .NET Runtime. Папка публикации — `publish/win-x64/`; архив для переноса — `publish/WirelessSecurityAnalyzer-win-x64.zip`.
 
-Итоговая проверка Release повторила тот же результат: 0 warnings, 0 errors, 57 passed / 1 skipped. `dotnet restore --locked-mode` проходит. Self-contained публикация `win-x64` собрана; проверены PE32+ GUI executable x86-64, наличие `coreclr.dll`, Windows Skia и включённого Runtime в `runtimeconfig.json`. Папка публикации — `publish/win-x64/`; архив для переноса — `publish/WirelessSecurityAnalyzer-win-x64.zip`.
-
-Реальную работу `wlanapi.dll`, запуск Windows `.exe`, соответствие результатов реальной Wi-Fi среде и поведение конкретных драйверов на этой машине проверить нельзя. Выполнить [WINDOWS_VALIDATION.md](WINDOWS_VALIDATION.md), прежде чем объявлять первый milestone полностью завершённым.
+Реальную работу `wlanapi.dll`, запуск Windows `.exe`, соответствие результатов реальной Wi-Fi среде и поведение конкретных драйверов нужно проверить на Windows, прежде чем объявлять первый milestone полностью завершённым.
 
 ## Оставшиеся этапы
 
