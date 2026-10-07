@@ -8,10 +8,12 @@ public sealed record NavigationItem(string Title, ViewModelBase Page);
 public sealed partial class MainWindowViewModel : ViewModelBase
 {
     private readonly AccessPointsViewModel _accessPoints;
+    private readonly SignalViewModel _signal;
     public MainWindowViewModel(DashboardViewModel dashboard, AccessPointsViewModel accessPoints,
         ChannelsViewModel channels, SignalViewModel signal, DevicesViewModel devices, SettingsViewModel settings)
     {
         _accessPoints = accessPoints;
+        _signal = signal;
         Navigation = [new("Обзор", dashboard), new("Эфир", accessPoints), new("Каналы", channels),
             new("Сигнал", signal), new("Устройства", devices), new("Настройки", settings)];
         _selectedNavigation = Navigation[1];
@@ -25,5 +27,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [RelayCommand]
     private Task InitializeAsync() => _accessPoints.InitializeAsync();
-    public void Stop() => _accessPoints.Stop();
+    public void Stop()
+    {
+        _accessPoints.Stop();
+        _signal.Stop();
+    }
+
+    public async Task StopAsync()
+    {
+        Stop();
+        await Task.WhenAll(_accessPoints.StopAsync(), _signal.StopAsync(), InitializeCommand.ExecutionTask ?? Task.CompletedTask);
+    }
 }

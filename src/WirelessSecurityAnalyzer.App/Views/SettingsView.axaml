@@ -4,6 +4,6 @@
     <TextBlock Text="Настройки" Classes="title" />
     <Border Classes="card"><StackPanel Spacing="12"><TextBlock Text="Разрешения Windows" FontSize="18" /><TextBlock Text="Для доступа к BSSID и окружающим сетям Windows может требовать разрешение определения местоположения. Включите его для классических приложений." Classes="subtitle" /><Button Content="Открыть параметры местоположения" Command="{Binding AccessPoints.OpenLocationSettingsCommand}" HorizontalAlignment="Left" /></StackPanel></Border>
     <Border Classes="card"><StackPanel Spacing="12"><TextBlock Text="Локальные журналы" FontSize="18" /><TextBlock Text="{Binding LogsDirectory}" TextWrapping="Wrap" /><TextBlock Text="Сохраняются 14 последних файлов журналов. Данные сетей и журналы не отправляются в интернет." Classes="subtitle" /></StackPanel></Border>
-    <TextBlock Text="Интервал автоматического мониторинга появится на втором этапе." Classes="subtitle" />
+    <TextBlock Text="Интервал мониторинга 5–60 секунд можно выбрать в разделе «Сигнал». История хранится в памяти до закрытия приложения." Classes="subtitle" />
   </StackPanel>
 </UserControl>

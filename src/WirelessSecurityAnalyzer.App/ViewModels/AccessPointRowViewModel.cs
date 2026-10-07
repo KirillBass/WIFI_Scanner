@@ -10,6 +10,7 @@ public sealed class AccessPointRowViewModel(WifiAccessPoint accessPoint) : ViewM
     public string Ssid => _accessPoint.IsHidden ? "〈Скрытая сеть〉" :
         string.Concat(_accessPoint.Ssid.Select(c => char.IsControl(c) ? '□' : c));
     public string Bssid => _accessPoint.Bssid;
+    public string DisplayName => $"{Ssid} | {Bssid} | канал {Channel} | {RssiDbm} dBm";
     public int RssiDbm => _accessPoint.RssiDbm;
     public uint LinkQuality => _accessPoint.LinkQuality;
     public string Channel => _accessPoint.Channel > 0 ? _accessPoint.Channel.ToString(CultureInfo.InvariantCulture) : "—";

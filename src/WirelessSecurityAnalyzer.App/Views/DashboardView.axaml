@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels" x:Class="WirelessSecurityAnalyzer.App.Views.DashboardView" x:DataType="vm:DashboardViewModel">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
   <StackPanel Spacing="22">
     <TextBlock Text="Обзор" Classes="title" />
     <TextBlock Text="Сводка последнего успешного сканирования" Classes="subtitle" />
@@ -10,6 +11,8 @@
       <Border Classes="card"><StackPanel Spacing="10"><TextBlock Text="6 ГГц" Classes="subtitle" /><TextBlock Text="{Binding AccessPoints.Ghz6Count}" FontSize="34" /></StackPanel></Border>
     </UniformGrid>
     <Border Classes="card"><StackPanel Spacing="12"><TextBlock Text="Wi-Fi адаптеры" FontSize="18" /><TextBlock Text="{Binding AccessPoints.AdapterText}" TextWrapping="Wrap" /><TextBlock Text="{Binding AccessPoints.StatusText}" Classes="subtitle" /><Button Content="Сканировать эфир" Command="{Binding AccessPoints.ScanCommand}" HorizontalAlignment="Left" /></StackPanel></Border>
-    <TextBlock Text="Мониторинг сигнала, оценка каналов и поиск устройств будут добавлены после проверки базового сканера на Windows." Classes="subtitle" />
+    <Border Classes="card"><StackPanel Spacing="8"><TextBlock Text="Мониторинг сигнала" FontSize="18" /><TextBlock Text="{Binding Signal.StatusText}" TextWrapping="Wrap" /><TextBlock Text="{Binding Signal.SelectedSsid, StringFormat='Сеть: {0}'}" /><TextBlock Text="{Binding Signal.SelectedBssid, StringFormat='BSSID: {0}'}" Classes="subtitle" /><TextBlock Text="{Binding Signal.CurrentRssiText, StringFormat='Текущий RSSI: {0}'}" /></StackPanel></Border>
+    <TextBlock Text="Мониторинг RSSI доступен в разделе «Сигнал». Оценка каналов и поиск устройств относятся к следующим этапам." Classes="subtitle" />
   </StackPanel>
+  </ScrollViewer>
 </UserControl>

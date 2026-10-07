@@ -15,15 +15,22 @@ public sealed partial class AccessPointsViewModel : ViewModelBase
     private readonly IWifiAdapterService _adapterService;
     private readonly ISystemSettingsService _settings;
     private readonly ILogger _logger;
+    private readonly IWifiScanState _scanState;
     private readonly Dictionary<string, AccessPointRowViewModel> _rows = new(StringComparer.OrdinalIgnoreCase);
     private readonly CancellationTokenSource _lifetime = new();
+    private long _snapshotVersion;
+    private bool _stopped;
 
-    public AccessPointsViewModel(IWifiScanner scanner, IWifiAdapterService adapterService, ISystemSettingsService settings, ILogger logger)
+    public AccessPointsViewModel(IWifiScanner scanner, IWifiAdapterService adapterService,
+        ISystemSettingsService settings, ILogger logger, IWifiScanState scanState)
     {
         _scanner = scanner;
         _adapterService = adapterService;
         _settings = settings;
         _logger = logger;
+        _scanState = scanState;
+        _scanState.Updated += OnScanUpdated;
+        if (_scanState.Current is { } snapshot) ApplySnapshot(snapshot);
     }
 
     public ObservableCollection<AccessPointRowViewModel> AccessPoints { get; } = [];
@@ -80,23 +87,10 @@ public sealed partial class AccessPointsViewModel : ViewModelBase
         StatusText = "Сканирование эфира…";
         try
         {
-            var results = await _scanner.ScanAsync(linked.Token).ConfigureAwait(false);
+            await _scanner.ScanAsync(linked.Token).ConfigureAwait(false);
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                var seen = results.Select(ap => ap.Bssid).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                foreach (var bssid in _rows.Keys.Where(key => !seen.Contains(key)).ToArray()) _rows.Remove(bssid);
-                foreach (var ap in results)
-                {
-                    if (_rows.TryGetValue(ap.Bssid, out var row)) row.Update(ap);
-                    else _rows.Add(ap.Bssid, new AccessPointRowViewModel(ap));
-                }
-                ApplyFilter();
-                OnPropertyChanged(nameof(TotalCount));
-                OnPropertyChanged(nameof(Ghz24Count));
-                OnPropertyChanged(nameof(Ghz5Count));
-                OnPropertyChanged(nameof(Ghz6Count));
-                LastScanText = $"Последнее сканирование: {DateTimeOffset.Now:HH:mm:ss}";
-                StatusText = results.Count == 0 ? "Сканирование завершено. Точки доступа не обнаружены." : $"Обнаружено BSS: {TotalCount}";
+                if (_scanState.Current is { } snapshot) ApplySnapshot(snapshot);
             });
         }
         catch (OperationCanceledException) when (linked.IsCancellationRequested)
@@ -122,7 +116,46 @@ public sealed partial class AccessPointsViewModel : ViewModelBase
         }
     }
 
-    public void Stop() { _lifetime.Cancel(); ScanCommand.Cancel(); }
+    public void Stop()
+    {
+        if (_stopped) return;
+        _stopped = true;
+        _scanState.Updated -= OnScanUpdated;
+        _lifetime.Cancel();
+        ScanCommand.Cancel();
+    }
+
+    public async Task StopAsync()
+    {
+        Stop();
+        if (ScanCommand.ExecutionTask is { } task) await task;
+    }
+
+    private void OnScanUpdated(object? sender, WifiScanSnapshot snapshot) =>
+        Dispatcher.UIThread.Post(() => { if (!_stopped) ApplySnapshot(snapshot); });
+
+    private void ApplySnapshot(WifiScanSnapshot snapshot)
+    {
+        if (snapshot.Version <= _snapshotVersion) return;
+        _snapshotVersion = snapshot.Version;
+        var seen = snapshot.AccessPoints.Select(ap => ap.Bssid).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var bssid in _rows.Keys.Where(key => !seen.Contains(key)).ToArray()) _rows.Remove(bssid);
+        foreach (var ap in snapshot.AccessPoints)
+        {
+            if (_rows.TryGetValue(ap.Bssid, out var row)) row.Update(ap);
+            else _rows.Add(ap.Bssid, new AccessPointRowViewModel(ap));
+        }
+        ApplyFilter();
+        OnPropertyChanged(nameof(TotalCount));
+        OnPropertyChanged(nameof(Ghz24Count));
+        OnPropertyChanged(nameof(Ghz5Count));
+        OnPropertyChanged(nameof(Ghz6Count));
+        HasError = false;
+        IsLocationPermissionRequired = false;
+        ErrorMessage = string.Empty;
+        LastScanText = $"Последнее сканирование: {snapshot.CompletedAt.ToLocalTime():HH:mm:ss}";
+        StatusText = TotalCount == 0 ? "Сканирование завершено. Точки доступа не обнаружены." : $"Обнаружено BSS: {TotalCount}";
+    }
 
     private void ShowError(Exception exception)
     {

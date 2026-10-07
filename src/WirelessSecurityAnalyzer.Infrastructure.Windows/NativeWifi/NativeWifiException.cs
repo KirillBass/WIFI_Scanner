@@ -22,9 +22,9 @@ public sealed class NativeWifiException : WifiException
     private static WifiErrorKind MapKind(uint code) => code switch
     {
         5 => WifiErrorKind.AccessDenied,
-        1062 => WifiErrorKind.ServiceUnavailable,
+        50 or 1062 or 1722 => WifiErrorKind.ServiceUnavailable,
         0x80342002 => WifiErrorKind.RadioOff,
-        1168 => WifiErrorKind.NoAdapter,
+        1167 or 1168 => WifiErrorKind.NoAdapter,
         _ => WifiErrorKind.ScanFailed
     };
 }

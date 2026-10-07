@@ -9,7 +9,7 @@ internal static class WifiErrorPresenter
         WifiErrorKind.UnsupportedPlatform => "Сканирование Wi-Fi доступно только в Windows 10/11. Эта среда позволяет проверить интерфейс приложения.",
         WifiErrorKind.NoAdapter => "Wi-Fi адаптер не обнаружен. Проверьте подключение адаптера и его драйвер.",
         WifiErrorKind.RadioOff => "Wi-Fi отключён или адаптер не готов. Включите Wi-Fi и отключите режим «В самолёте».",
-        WifiErrorKind.ServiceUnavailable => "Служба WLAN AutoConfig не запущена. Включите службу автонастройки WLAN в Windows.",
+        WifiErrorKind.ServiceUnavailable => "Служба WLAN AutoConfig недоступна или операция WLAN не поддерживается. Проверьте службу автонастройки WLAN и драйвер адаптера.",
         WifiErrorKind.AccessDenied => "Windows запретила доступ к данным Wi-Fi. Проверьте разрешение определения местоположения и доступ для классических приложений в параметрах конфиденциальности.",
         WifiErrorKind.Timeout => "Адаптер не сообщил о завершении сканирования за 10 секунд. Попробуйте повторить сканирование.",
         WifiErrorKind.InvalidNativeData => "Драйвер вернул некорректные данные Wi-Fi. Попробуйте обновить драйвер адаптера.",

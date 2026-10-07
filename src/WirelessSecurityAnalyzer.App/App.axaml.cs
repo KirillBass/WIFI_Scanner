@@ -23,8 +23,11 @@ public partial class App : Application
             var services = new ServiceCollection();
             services.AddSingleton<ILogger>(Log.Logger);
             services.AddSingleton<WindowsWifiScanner>();
-            services.AddSingleton<IWifiScanner>(p => p.GetRequiredService<WindowsWifiScanner>());
+            services.AddSingleton<WifiScanService>(p => new WifiScanService(p.GetRequiredService<WindowsWifiScanner>(), Log.Logger));
+            services.AddSingleton<IWifiScanner>(p => p.GetRequiredService<WifiScanService>());
+            services.AddSingleton<IWifiScanState>(p => p.GetRequiredService<WifiScanService>());
             services.AddSingleton<IWifiAdapterService>(p => p.GetRequiredService<WindowsWifiScanner>());
+            services.AddSingleton<IWifiMonitorService, WifiMonitorService>();
             services.AddSingleton<ISystemSettingsService, WindowsSystemSettingsService>();
             services.AddSingleton<AccessPointsViewModel>();
             services.AddSingleton<DashboardViewModel>();

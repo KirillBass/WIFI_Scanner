@@ -1,3 +1,69 @@
-<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="WirelessSecurityAnalyzer.App.Views.SignalView">
-  <StackPanel Spacing="18"><TextBlock Text="Сигнал" Classes="title" /><Border Classes="card"><TextBlock Text="Мониторинг RSSI и график истории сигнала запланированы на второй этап. Текущий RSSI уже доступен в разделе «Эфир»." Classes="subtitle" /></Border></StackPanel>
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels"
+             xmlns:plot="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
+             x:Class="WirelessSecurityAnalyzer.App.Views.SignalView" x:DataType="vm:SignalViewModel">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="14">
+    <StackPanel Spacing="5">
+      <TextBlock Text="Сигнал" Classes="title" />
+      <TextBlock Text="История RSSI выбранного BSSID · последние 300 измерений" Classes="subtitle" />
+    </StackPanel>
+    <Border Grid.Row="1" Classes="card" Padding="14">
+      <Grid ColumnDefinitions="*,190" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="9">
+        <ComboBox ItemsSource="{Binding AccessPoints}" SelectedItem="{Binding SelectedAccessPoint}"
+                  IsEnabled="{Binding CanChangeSelection}" PlaceholderText="Выберите точку доступа" HorizontalAlignment="Stretch">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:AccessPointRowViewModel"><TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" /></DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <StackPanel Grid.Column="1" Spacing="4">
+          <TextBlock Text="Интервал мониторинга" Classes="subtitle" FontSize="12" />
+          <ComboBox ItemsSource="{Binding IntervalOptions}" SelectedItem="{Binding SelectedIntervalSeconds}"
+                    IsEnabled="{Binding CanChangeSelection}" HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate><DataTemplate x:DataType="x:Int32"><TextBlock Text="{Binding StringFormat='{}{0} секунд'}" /></DataTemplate></ComboBox.ItemTemplate>
+          </ComboBox>
+        </StackPanel>
+        <WrapPanel Grid.Row="1" Grid.ColumnSpan="2">
+          <TextBlock Text="{Binding SelectedSsid, StringFormat='SSID: {0}'}" Margin="0,0,18,0" />
+          <TextBlock Text="{Binding SelectedBssid, StringFormat='BSSID: {0}'}" Margin="0,0,18,0" />
+          <TextBlock Text="{Binding SelectedChannel, StringFormat='Канал: {0}'}" Margin="0,0,18,0" />
+          <TextBlock Text="{Binding SelectedBand, StringFormat='Диапазон: {0}'}" />
+        </WrapPanel>
+      </Grid>
+    </Border>
+    <StackPanel Grid.Row="2" Spacing="9">
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <Button Content="Начать мониторинг" Command="{Binding StartMonitoringCommand}" Classes="primary" />
+        <Button Content="Остановить" Command="{Binding StopMonitoringCommand}" />
+        <Button Content="Очистить историю" Command="{Binding ClearHistoryCommand}" />
+        <TextBlock Text="Останавливаем…" IsVisible="{Binding IsStopping}" VerticalAlignment="Center" Classes="subtitle" />
+      </StackPanel>
+      <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />
+      <Border Classes="card" IsVisible="{Binding HasError}" BorderBrush="{DynamicResource ErrorBrush}" Padding="10">
+        <StackPanel Spacing="7">
+          <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" />
+          <Button Content="Открыть параметры местоположения" Command="{Binding OpenLocationSettingsCommand}" IsVisible="{Binding IsLocationPermissionRequired}" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+    <UniformGrid Grid.Row="3" Columns="4">
+      <Border Classes="card" Padding="14" Margin="0,0,10,0"><StackPanel Spacing="5"><TextBlock Text="Текущий" Classes="subtitle" /><TextBlock Text="{Binding CurrentRssiText}" FontSize="24" /><TextBlock Text="{Binding SignalQualityText}" Classes="subtitle" /></StackPanel></Border>
+      <Border Classes="card" Padding="14" Margin="0,0,10,0"><StackPanel Spacing="5"><TextBlock Text="Средний" Classes="subtitle" /><TextBlock Text="{Binding AverageRssiText}" FontSize="24" /></StackPanel></Border>
+      <Border Classes="card" Padding="14" Margin="0,0,10,0"><StackPanel Spacing="5"><TextBlock Text="Минимальный" Classes="subtitle" /><TextBlock Text="{Binding MinimumRssiText}" FontSize="24" /></StackPanel></Border>
+      <Border Classes="card" Padding="14"><StackPanel Spacing="5"><TextBlock Text="Максимальный" Classes="subtitle" /><TextBlock Text="{Binding MaximumRssiText}" FontSize="24" /></StackPanel></Border>
+    </UniformGrid>
+    <Border Grid.Row="4" Classes="card" Padding="5" MinHeight="180" ClipToBounds="True">
+      <Grid>
+        <plot:AvaPlot x:Name="SignalPlot" />
+        <Border Background="{DynamicResource CardBrush}" IsVisible="{Binding !HasSamples}" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="14">
+          <TextBlock Text="График появится после первого измерения" Classes="subtitle" />
+        </Border>
+      </Grid>
+    </Border>
+    <Grid Grid.Row="5" ColumnDefinitions="*,Auto">
+      <TextBlock Text="{Binding LastSeenText, StringFormat='Последнее измерение: {0}'}" Classes="subtitle" />
+      <TextBlock Grid.Column="1" Text="{Binding SampleCount, StringFormat='Измерений: {0} / 300'}" Classes="subtitle" />
+    </Grid>
+  </Grid>
+  </ScrollViewer>
 </UserControl>
