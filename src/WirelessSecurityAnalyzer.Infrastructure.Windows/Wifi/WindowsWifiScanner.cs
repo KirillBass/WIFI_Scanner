@@ -3,11 +3,13 @@ using WirelessSecurityAnalyzer.Core.Common;
 using WirelessSecurityAnalyzer.Core.Interfaces;
 using WirelessSecurityAnalyzer.Core.Models;
 using WirelessSecurityAnalyzer.Infrastructure.Windows.NativeWifi;
+using WirelessSecurityAnalyzer.Infrastructure.Windows.Network.Identity;
 
 namespace WirelessSecurityAnalyzer.Infrastructure.Windows.Wifi;
 
-public sealed class WindowsWifiScanner(ILogger logger) : IWifiScanner, IWifiAdapterService
+public sealed class WindowsWifiScanner(ILogger logger, MacVendorResolver? vendorResolver = null) : IWifiScanner, IWifiAdapterService
 {
+    private readonly MacVendorResolver _vendorResolver = vendorResolver ?? new MacVendorResolver();
     private readonly SemaphoreSlim _scanGate = new(1, 1);
     private static readonly TimeSpan ScanTimeout = TimeSpan.FromSeconds(10);
 
@@ -15,7 +17,7 @@ public sealed class WindowsWifiScanner(ILogger logger) : IWifiScanner, IWifiAdap
         Task.Run<IReadOnlyList<WifiAdapter>>(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            using var client = new NativeWifiClient(logger);
+            using var client = new NativeWifiClient(logger, _vendorResolver);
             var adapters = client.GetAdapters();
             logger.Information("Detected {AdapterCount} WLAN interfaces: {Adapters}", adapters.Count,
                 adapters.Select(a => new { a.Description, a.State }));
@@ -29,7 +31,7 @@ public sealed class WindowsWifiScanner(ILogger logger) : IWifiScanner, IWifiAdap
         {
             return await Task.Run(async () =>
             {
-                using var client = new NativeWifiClient(logger);
+                using var client = new NativeWifiClient(logger, _vendorResolver);
                 var adapters = client.GetAdapters();
                 if (adapters.Count == 0)
                     throw new WifiException(WifiErrorKind.NoAdapter, "No WLAN adapters were found.");

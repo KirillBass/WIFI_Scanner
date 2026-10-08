@@ -1,3 +1,4 @@
+using System.Net.NetworkInformation;
 using WirelessSecurityAnalyzer.Core.Models;
 using WirelessSecurityAnalyzer.Core.Network;
 
@@ -7,11 +8,14 @@ public sealed class MacVendorResolver
 {
     private readonly Lazy<IReadOnlyDictionary<string, string>> _vendors = new(Load);
 
-    public DeviceIdentity Resolve(NetworkDevice device)
+    public DeviceIdentity Resolve(NetworkDevice device) => Resolve(device.MacAddress);
+
+    // The same embedded database serves local devices and access-point BSSIDs.
+    public DeviceIdentity Resolve(PhysicalAddress? address)
     {
-        var privateMac = MacAddressHelper.IsLocallyAdministered(device.MacAddress);
-        if (privateMac || !DeviceStateTracker.ValidMac(device.MacAddress)) return new() { IsPrivateMac = privateMac };
-        var mac = device.MacAddress!.ToString();
+        var privateMac = MacAddressHelper.IsLocallyAdministered(address);
+        if (privateMac || !DeviceStateTracker.ValidMac(address)) return new() { IsPrivateMac = privateMac };
+        var mac = address!.ToString();
         foreach (var length in new[] { 9, 7, 6 })
             if (_vendors.Value.TryGetValue(mac[..length], out var vendor))
                 return new() { Vendor = vendor, VendorSource = DeviceVendorSource.Oui };

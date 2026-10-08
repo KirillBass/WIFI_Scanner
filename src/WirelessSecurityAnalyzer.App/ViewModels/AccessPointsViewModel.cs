@@ -40,8 +40,10 @@ public sealed partial class AccessPointsViewModel : ViewModelBase
     public int Ghz5Count => _rows.Values.Count(r => r.AccessPoint.Band == WifiBand.Ghz5);
     public int Ghz6Count => _rows.Values.Count(r => r.AccessPoint.Band == WifiBand.Ghz6);
     public bool IsEmpty => AccessPoints.Count == 0;
+    public bool HasSelectedAccessPoint => SelectedAccessPoint is not null;
 
     [ObservableProperty] private string _searchText = string.Empty;
+    [ObservableProperty] private AccessPointRowViewModel? _selectedAccessPoint;
     [ObservableProperty] private int _selectedBandIndex;
     [ObservableProperty] private bool _strongestFirst = true;
     [ObservableProperty] private bool _isBusy;
@@ -53,6 +55,7 @@ public sealed partial class AccessPointsViewModel : ViewModelBase
     [ObservableProperty] private string _lastScanText = "Сканирование ещё не выполнялось";
 
     partial void OnSearchTextChanged(string value) => ApplyFilter();
+    partial void OnSelectedAccessPointChanged(AccessPointRowViewModel? value) => OnPropertyChanged(nameof(HasSelectedAccessPoint));
     partial void OnSelectedBandIndexChanged(int value) => ApplyFilter();
     partial void OnStrongestFirstChanged(bool value) => ApplyFilter();
 
@@ -175,6 +178,7 @@ public sealed partial class AccessPointsViewModel : ViewModelBase
         var target = (StrongestFirst ? filtered.OrderByDescending(r => r.RssiDbm) : filtered.OrderBy(r => r.RssiDbm))
             .ThenBy(r => r.Bssid).ToArray();
         var visible = target.ToHashSet();
+        if (SelectedAccessPoint is not null && !visible.Contains(SelectedAccessPoint)) SelectedAccessPoint = null;
         for (var i = AccessPoints.Count - 1; i >= 0; i--)
             if (!visible.Contains(AccessPoints[i])) AccessPoints.RemoveAt(i);
         for (var i = 0; i < target.Length; i++)

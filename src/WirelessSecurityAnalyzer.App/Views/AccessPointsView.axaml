@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels" xmlns:controls="using:WirelessSecurityAnalyzer.App.Controls"
              x:Class="WirelessSecurityAnalyzer.App.Views.AccessPointsView" x:DataType="vm:AccessPointsViewModel">
-  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="16">
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto" RowSpacing="16">
     <StackPanel Spacing="7"><TextBlock Text="Эфир" Classes="title" /><TextBlock Text="Доступные точки доступа · Windows Native Wi-Fi" Classes="subtitle" /><TextBlock Text="{Binding AdapterText}" Classes="subtitle" /></StackPanel>
     <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
       <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" />
@@ -20,15 +20,27 @@
     </Grid>
     <Border Grid.Row="4" Classes="card" Padding="0" ClipToBounds="True">
       <Grid>
-        <TableView ItemsSource="{Binding AccessPoints}" CanUserResizeColumns="True">
+        <TableView ItemsSource="{Binding AccessPoints}" SelectedItem="{Binding SelectedAccessPoint, Mode=TwoWay}"
+                   CanUserResizeColumns="True" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False">
           <TableView.Columns>
-            <TableViewColumn Header="SSID" Binding="{ReflectionBinding Ssid}" Width="2*" />
+            <TableViewColumn Header="SSID" Binding="{ReflectionBinding Ssid}" Width="200" />
             <TableViewColumn Header="BSSID" Binding="{ReflectionBinding Bssid}" Width="165" />
+            <TableViewColumn Header="Вендор" Width="190">
+              <TableViewColumn.CellTemplate><DataTemplate x:DataType="vm:AccessPointRowViewModel">
+                <TextBlock Text="{Binding Vendor}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Vendor}" />
+              </DataTemplate></TableViewColumn.CellTemplate>
+            </TableViewColumn>
             <TableViewColumn Header="RSSI / сигнал" Width="140">
               <TableViewColumn.CellTemplate><DataTemplate x:DataType="vm:AccessPointRowViewModel"><controls:SignalStrengthControl RssiDbm="{Binding RssiDbm}" /></DataTemplate></TableViewColumn.CellTemplate>
             </TableViewColumn>
             <TableViewColumn Header="Канал" Binding="{ReflectionBinding Channel}" Width="65" />
             <TableViewColumn Header="Диапазон" Binding="{ReflectionBinding Band}" Width="100" />
+            <TableViewColumn Header="Стандарт Wi-Fi" Binding="{ReflectionBinding WifiStandard}" Width="200" />
+            <TableViewColumn Header="Безопасность" Width="195">
+              <TableViewColumn.CellTemplate><DataTemplate x:DataType="vm:AccessPointRowViewModel">
+                <TextBlock Text="{Binding Security}" ToolTip.Tip="{Binding SecurityDetails}" />
+              </DataTemplate></TableViewColumn.CellTemplate>
+            </TableViewColumn>
             <TableViewColumn Header="Частота" Binding="{ReflectionBinding Frequency}" Width="115" />
             <TableViewColumn Header="Обнаружена" Binding="{ReflectionBinding LastSeen}" Width="145" />
           </TableView.Columns>
@@ -39,7 +51,14 @@
         </StackPanel>
       </Grid>
     </Border>
-    <Grid Grid.Row="5" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
+    <Border Grid.Row="5" Classes="card" Padding="12" IsVisible="{Binding HasSelectedAccessPoint}">
+      <StackPanel Spacing="6">
+        <TextBlock Text="Выбранная точка доступа" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding SelectedAccessPoint.Details}" TextWrapping="Wrap" />
+        <TextBlock Text="Вендор — владелец OUI, а не модель роутера. Защита — объявленные режимы BSS, а не параметры подключения клиента." Classes="subtitle" TextWrapping="Wrap" />
+      </StackPanel>
+    </Border>
+    <Grid Grid.Row="6" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
       <ProgressBar Grid.ColumnSpan="2" IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="3" />
       <TextBlock Grid.Row="1" Text="{Binding LastScanText}" Classes="subtitle" />
       <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TotalCount, StringFormat='Всего BSS: {0}'}" Classes="subtitle" />

@@ -181,6 +181,14 @@ API сверены с [документацией GetIpNetTable2/FreeMibTable](h
 
 Cache 15 минут, MAC-first/IP fallback и scope сети, controlled concurrency, cancellation/Stop/shutdown, source priority, private-MAC detection, таблица vendor/display/tooltip реализованы. Низкоуровневый discovery и функции этапов 1–4 сохранены; новых NuGet-пакетов нет. Restore/build/publish успешны, Release 0 warnings/errors; локально 333 passed, 0 failed, 2 Windows hardware skipped. Production startup/DI и отдельный GUI preview проверены. Прежние описания системного DNS/5-минутного hostname cache выше относятся к исходному Milestone 4; актуальный путь описан в [техническом отчёте](DEVICE_IDENTITY_REPORT.md), содержащем все 14 пунктов ТЗ и итоговые проверки.
 
+## «Эфир»: Vendor / Wi-Fi Standard / Security
+
+Текущие исходники дополняют прежние BSS локальными метаданными: общий embedded OUI resolver для BSSID; Native PHY + безопасный TLV parser HT/VHT/HE/EHT; RSN/WPA suites для Open/WEP/WPA/WPA2/WPA3/transition и OWE. Protocol, authentication, pairwise/group cipher, PMF и источник хранятся раздельно. Неподтверждённые поля остаются Unknown; приватный BSSID не проходит OUI lookup. WEP требует однозначного подтверждения Windows network list, Privacy bit сам по себе недостаточен.
+
+«Эфир» содержит 10 читаемых колонок с горизонтальной прокруткой, security tooltip и деталями выбранной AP. Повторный snapshot обновляет ту же строку и её детали. Scan loop, RSSI monitoring, модель 20-МГц Channel Analyzer, Device Discovery/Identity и NuGet dependencies сохранены. Данные/unsafe pointers не передаются за пределы native lifetime; новых внешних web API нет.
+
+Restore/build/test успешны; Release 0 ошибок/предупреждений; 447 passed, 0 failed, 2 Windows hardware skipped. Добавлено 114 локальных проверок, тестовые файлы остаются вне repository. GUI проверен на Linux с отдельным локальным preview; настоящий WLAN scan/6-GHz радиоэфир требуют Windows. Подробный отчёт из 15 пунктов — [AIR_CAPABILITIES_REPORT.md](AIR_CAPABILITIES_REPORT.md). Функционал включён в [Version 6 (6.0.0)](https://github.com/KirillBass/WIFI_Scanner/releases/tag/v6.0.0); релиз содержит self-contained Windows x64 архив и SHA-256.
+
 ## Оставшиеся этапы
 
 1. Аппаратная проверка четырёх реализованных этапов на Windows с Wi-Fi/Ethernet адаптером, включая настоящее обнаружение телефона/роутера и исчезновение интерфейса.

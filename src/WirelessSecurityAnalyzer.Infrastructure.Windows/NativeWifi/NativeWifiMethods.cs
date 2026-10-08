@@ -31,5 +31,9 @@ internal static class NativeWifiMethods
         IntPtr reserved, out IntPtr list);
 
     [DllImport("wlanapi.dll", ExactSpelling = true)]
+    internal static extern uint WlanGetAvailableNetworkList(SafeWlanHandle handle, in Guid interfaceId,
+        uint flags, IntPtr reserved, out IntPtr list);
+
+    [DllImport("wlanapi.dll", ExactSpelling = true)]
     internal static extern void WlanFreeMemory(IntPtr memory);
 }
