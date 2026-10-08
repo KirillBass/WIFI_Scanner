@@ -1,6 +1,6 @@
 # Состояние реализации
 
-ТЗ: `WirelessSecurityAnalyzer_Codex_TZ.docx`, `WirelessSecurityAnalyzer_Milestone2_Codex.docx` и `WirelessSecurityAnalyzer_Milestone3_Codex.docx`. Реализован код первых трёх этапов поверх существующего сканера. Аппаратная проверка на Windows остаётся необходимой проверкой.
+ТЗ: `WirelessSecurityAnalyzer_Codex_TZ.docx`, `WirelessSecurityAnalyzer_Milestone2_Codex.docx`, `WirelessSecurityAnalyzer_Milestone3_Codex.docx`, `WirelessSecurityAnalyzer_Milestone4_Codex.docx`. Реализован код первых четырёх этапов поверх существующего сканера. Аппаратная проверка на Windows остаётся необходимой проверкой.
 
 ## Первый этап — код реализован, аппаратная проверка ожидается
 
@@ -121,10 +121,61 @@ DirectBssCount считает нормализованный канал, Influen
 
 Остаются аппаратные сценарии Windows: реальный scan, анализ настоящих 2,4/5/6-ГГц BSS, проверка драйверов/разрешений и отключения USB Wi-Fi адаптера. В Linux проверяется алгоритм и UI, а не работа wlanapi.dll. Реальная ширина, RF airtime/не-Wi-Fi помехи, regulatory domain и текущий подключённый BSSID не определяются. Четвёртый этап не реализован.
 
+## Четвёртый этап — код реализован, аппаратная проверка ожидается
+
+### Добавленные и изменённые файлы
+
+Добавлены 20 production-файлов; существующие solution, проекты, версии NuGet и WindowsWifiScanner сохранены.
+
+- Core/Models: `LocalNetworkInfo.cs` — интерфейс/IPv4-контекст; `NetworkDevice.cs` — устройство, состояние, evidence и наблюдение; `DeviceDiscoveryResult.cs` — результат, прогресс, neighbor/probe DTO и snapshot мониторинга.
+- Core/Interfaces: `ILocalNetworkService.cs`, `IDeviceDiscoveryService.cs`, `IDeviceMonitorService.cs`, `INetworkDiscoverySources.cs` — договоры выбора сети, единичного discovery, сессионного мониторинга и источников Ping/neighbor/DNS. Связанные небольшие договоры сгруппированы в одном файле.
+- Core/Network: `SubnetCalculator.cs`, `DeviceDiscoveryOptions.cs`, `DeviceStateTracker.cs`, `NetworkDiscoveryException.cs` — чистая арифметика, проверяемые лимиты, история и ошибки.
+- Infrastructure.Windows/Interop: `IpHelperNativeMethods.cs`, `IpHelperStructs.cs` — Win32 calls и ABI отдельно от Core.
+- Infrastructure.Windows/Network: `WindowsLocalNetworkService.cs`, `WindowsNeighborTableReader.cs`, `PingHostProbe.cs`, `HostnameResolver.cs`, `WindowsDeviceDiscoveryService.cs`, `DeviceMonitorService.cs` — источники ОС, один цикл и единственный scan/delay loop.
+- App/ViewModels: `DeviceRowViewModel.cs` — подписи/форматирование строки и пояснения состояний.
+
+Изменены `DevicesViewModel.cs`, `DevicesView.axaml`, `App.axaml.cs` (DI), `MainWindowViewModel.cs` (инициализация и shutdown), `MainWindow.axaml` (этап 4), README и этот отчёт. Локальный учебный разбор дополнен отдельно и остаётся исключённым из Git.
+
+### Интерфейс и подсеть
+
+Выбираются OperationalStatus.Up Wi-Fi/Ethernet интерфейсы с пригодным unicast IPv4; loopback/tunnel/PPP и APIPA исключаются. Начальный приоритет детерминирован: gateway → Wireless80211 → имя/ID → числовой IPv4. Пользователь может явно выбрать другой контекст в ComboBox; Ethernet без gateway также допустим. Связи с WLAN через текстовое имя/описание не вводятся. Контекст включает ID, текущий interface index, IPv4, prefix и gateway; смена любого из них останавливает цикл до публикации частичных результатов.
+
+SubnetCalculator преобразует октеты в uint в сетевом порядке, строит маску, network/broadcast и host range. /24 содержит 254, /22 — 1022 host-адреса; собственный IP исключается из probes. /31 имеет 2 endpoint, /32 — 1, broadcast=null; для MVP sweep обоих явно запрещён. Guard до enumeration/сетевых запросов ограничивает максимум 1024 hosts. Полное перечисление /8 или /0 не выполняется; произвольного удалённого диапазона нет.
+
+### Один discovery cycle
+
+1. Проверка актуальности выбранного интерфейса и IPv4-контекста.
+2. GetIpNetTable2(AF_INET), фильтр interface index/host range, копирование managed данных, FreeMibTable в finally.
+3. Lazy enumeration с Parallel.ForEachAsync: максимум 32 Ping, timeout 500 мс по умолчанию. Собственный компьютер добавляется из NetworkInfo. Системный маршрут проверяется через GetBestInterfaceEx перед отправкой; другой интерфейс/отсутствие маршрута означает пропуск адреса.
+4. Повторная проверка контекста и чтение neighbor table; всего два чтения за цикл.
+5. Merge по IP: latency берётся только из успешного echo reply, MAC — только из валидных системных данных; fresh neighbor может обнаружить устройство без Ping. Reachable подтверждает присутствие. Новая/сменившая MAC динамическая запись после probes также учитывается, если оба чтения удались. Неизменные Stale/Delay/Probe, Permanent/Incomplete/Unreachable и просто изменение счётчика возраста не подтверждают Online. Gateway flag сам по себе не создаёт устройство.
+6. Необязательный системный reverse DNS: timeout 1000 мс, параллелизм 4 по умолчанию; успешный hostname кэшируется на 5 минут в контексте IPv4. Отдельный глобальный DNS gate ограничивает незавершённые операции до 8; после timeout место освобождается при завершении исходного lookup. Имя не является подтверждением присутствия или ключом истории.
+7. Проверка контекста и возврат read-only observations/метаданных. Прогресс ограничен примерно 10 обновлениями в секунду и сменами этапов.
+
+Существенные Win32 ошибки записываются в log. При недоступной neighbor table сохраняются результаты Ping и показывается предупреждение. Если итоговое чтение соседей не удалось, есть ошибки probes или пропущенные маршруты, результат не увеличивает счётчики отсутствия. Все ICMP операции с ошибкой дают отдельную ошибку цикла. DNS failure/timeout не ломает discovery; отмена не считается ошибкой.
+
+### История, мониторинг, UI
+
+DeviceStateTracker сопоставляет валидный MAC в текущей L2-сети, затем IP при отсутствии противоречащего известного MAC. Одинаковые hostname не объединяют устройства. При смене известного MAC на том же IP создаётся отдельная история. FirstSeen сохраняется при DHCP-смене IP известного MAC и повторном обнаружении; LastSeen обновляется только при подтверждённом evidence. Первый/второй полный пропуск → Unknown, третий → Offline; порог в options. Новый evidence возвращает Online. Прерванный/ошибочный scan не старит историю.
+
+DeviceMonitorService координирует и ручной discovery, и фоновые циклы. Lifecycle gate отвергает второй запуск во время операции; discovery дополнительно сериализует прямые вызовы. Первый цикл сразу; задержка 10/30/60/120 секунд начинается после завершения предыдущего. Временные ошибки probes допускают следующую попытку, смена/исчезновение сети останавливает мониторинг. История хранится в памяти до закрытия/смены контекста. Stop и shutdown отменяют token и ожидают worker/команды; навигация цикл не останавливает.
+
+DevicesViewModel переносит snapshot/progress на UI Dispatcher и игнорирует старые версии и callbacks после Stop. Строки обновляются по изменённому массиву данных; progress не пересоздаёт ObservableCollection. Таблица: IP/роль/MAC/hostname/latency/state/LastSeen/FirstSeen; карточки сети/счётчики, поиск IP/MAC/hostname, filters и числовой IP/latency/LastSeen sort. Пояснения Online/Unknown/Offline доступны при наведении; шлюз и «Этот ПК» явно помечены. Интерфейс/интервал блокируются во время мониторинга.
+
+### Проверки и ограничения
+
+- Baseline перед изменениями: Release 0 warnings/errors, 155 passed, 1 hardware skipped.
+- Итог: restore с locked dependencies; Release build 0 warnings/errors; 250 passed, 0 failed, 2 skipped; self-contained Windows x64 publish. Тестовые исходники/зависимости и GUI preview находятся вне репозитория.
+- Новые проверки: IPv4 /24,/30,/29,/22,/31,/32,/0; маска/границы/count/guard; hysteresis/FirstSeen/LastSeen/MAC-first/IP fallback/context reset; Ping/Neighbor merge, stale cache, route skip, errors, DNS timeout, ограниченный probe/DNS parallelism, cancellation; scan/delay loop/manual overlap/context disappearance/subscriber isolation; ABI/padding/endian parsing; карточки/table/search/filter/sort/row identity/cancel/shutdown/selection/errors. Прежние проверки этапов 1–3 проходят.
+- Linux GUI: production startup/DI, сообщение UnsupportedPlatform, навигация и корректное закрытие. Отдельный локальный стенд с фальшивыми сетевыми зависимостями: заполненная таблица, роли, 3 состояния, фильтр Online, Start/Stop Monitoring, сохранение данных после Stop, навигация при работающем мониторинге и shutdown. Демонстрационные данные не включены в production.
+- Два integration skip требуют Windows: настоящий WLAN scan и чтение Windows neighbor table. Настоящие ПК/роутер/телефон, USB-adapter unplug/recovery и ограничения драйверов/политик в этой Linux-среде не проверены.
+- Client/AP Isolation, guest VLAN, сон, ICMP filtering и кэш соседей могут скрывать узлы. Это список локальной IP-сети, не AP association table. MAC может быть приватным; vendor/владелец не определяются. DNS использует серверы ОС, cloud/MAC lookup API отсутствуют. Port/service scan, packet capture и SQLite history не добавлялись.
+
+API сверены с [документацией GetIpNetTable2/FreeMibTable](https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-getipnettable2) и [состояний MIB_IPNET_ROW2](https://learn.microsoft.com/en-us/windows/win32/api/netioapi/ns-netioapi-mib_ipnet_row2); ABI также проверен локальными тестами layout.
+
 ## Оставшиеся этапы
 
-1. Аппаратная проверка трёх реализованных этапов на Windows с Wi-Fi адаптером.
-2. Устройства собственной локальной IP-сети: Wi-Fi IPv4 interface, subnet/gateway, ограниченный discovery до 1024 адресов, соседняя таблица через IP Helper API, контролируемый параллелизм и отмена.
-3. Полный Dashboard, сведения о текущем подключении, итоговая UX-полировка и проверка стабильности Release на Windows.
+1. Аппаратная проверка четырёх реализованных этапов на Windows с Wi-Fi/Ethernet адаптером, включая настоящее обнаружение телефона/роутера и исчезновение интерфейса.
+2. Полный Dashboard, сведения о текущем подключении, итоговая UX-полировка и проверка стабильности Release на Windows.
 
-Discovery пока отсутствует; страница «Устройства» явно обозначает этот статус. Порт-сканер, crawler, перехват трафика, анализ контента, базы данных и cloud services не входят в текущую реализацию.
+Discovery реализован в пределах собственной выбранной IPv4-подсети. Порт-сканер, crawler, перехват трафика, анализ контента, базы данных и cloud services не входят в текущую реализацию.

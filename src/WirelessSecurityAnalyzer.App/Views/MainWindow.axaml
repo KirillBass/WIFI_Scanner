@@ -13,7 +13,7 @@
             <DataTemplate x:DataType="vm:NavigationItem"><TextBlock Text="{Binding Title}" Margin="8,10" FontSize="16" /></DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
-        <TextBlock Grid.Row="3" Text="Wi-Fi Analyzer · этап 3&#10;Локальная обработка данных" Classes="subtitle" FontSize="12" />
+        <TextBlock Grid.Row="3" Text="Wi-Fi Analyzer · этап 4&#10;Локальная обработка данных" Classes="subtitle" FontSize="12" />
       </Grid>
     </Border>
     <ContentControl Grid.Column="1" Content="{Binding CurrentPage}" Margin="28" />

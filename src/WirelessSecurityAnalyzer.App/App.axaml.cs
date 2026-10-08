@@ -10,6 +10,8 @@ using WirelessSecurityAnalyzer.Core.Analysis.Channels;
 using WirelessSecurityAnalyzer.Core.Models;
 using WirelessSecurityAnalyzer.Infrastructure.Windows.Services;
 using WirelessSecurityAnalyzer.Infrastructure.Windows.Wifi;
+using WirelessSecurityAnalyzer.Core.Network;
+using WirelessSecurityAnalyzer.Infrastructure.Windows.Network;
 
 namespace WirelessSecurityAnalyzer.App;
 
@@ -34,6 +36,13 @@ public partial class App : Application
             services.AddSingleton<IChannelOverlapModel, ChannelOverlapCalculator>();
             services.AddSingleton<IChannelCandidateProvider, WifiChannelCatalog>();
             services.AddSingleton<IChannelAnalyzer, ChannelAnalyzer>();
+            services.AddSingleton(new DeviceDiscoveryOptions());
+            services.AddSingleton<ILocalNetworkService, WindowsLocalNetworkService>();
+            services.AddSingleton<INeighborTableReader, WindowsNeighborTableReader>();
+            services.AddSingleton<IHostProbe, PingHostProbe>();
+            services.AddSingleton<IHostnameResolver, HostnameResolver>();
+            services.AddSingleton<IDeviceDiscoveryService, WindowsDeviceDiscoveryService>();
+            services.AddSingleton<IDeviceMonitorService, DeviceMonitorService>();
             services.AddSingleton<ISystemSettingsService, WindowsSystemSettingsService>();
             services.AddSingleton<AccessPointsViewModel>();
             services.AddSingleton<DashboardViewModel>();

@@ -1,3 +1,80 @@
-<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="WirelessSecurityAnalyzer.App.Views.DevicesView">
-  <StackPanel Spacing="18"><TextBlock Text="Устройства локальной сети" Classes="title" /><Border Classes="card"><TextBlock Text="Ограниченное обнаружение устройств собственной IP-подсети запланировано на четвёртый этап. Список устройств не будет обозначать клиентов конкретной точки доступа." Classes="subtitle" /></Border></StackPanel>
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels" xmlns:models="using:WirelessSecurityAnalyzer.Core.Models"
+             x:Class="WirelessSecurityAnalyzer.App.Views.DevicesView" x:DataType="vm:DevicesViewModel">
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Spacing="14">
+      <StackPanel Spacing="6">
+        <TextBlock Text="Устройства локальной сети" Classes="title" />
+        <TextBlock Text="Узлы выбранной IPv4-подсети · список не определяет клиентов конкретной точки доступа" Classes="subtitle" />
+      </StackPanel>
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+        <ComboBox ItemsSource="{Binding Networks}" SelectedItem="{Binding SelectedNetwork}" IsEnabled="{Binding CanConfigure}" HorizontalAlignment="Stretch" PlaceholderText="Локальный IPv4-интерфейс">
+          <ComboBox.ItemTemplate><DataTemplate x:DataType="models:LocalNetworkInfo"><TextBlock Text="{Binding DisplayName}" /></DataTemplate></ComboBox.ItemTemplate>
+        </ComboBox>
+        <Button Grid.Column="1" Content="Обновить интерфейсы" Command="{Binding RefreshInterfacesCommand}" />
+      </Grid>
+      <TextBlock Text="{Binding InterfaceText}" Classes="subtitle" />
+      <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
+        <Border Classes="card" Padding="14"><StackPanel Spacing="5"><TextBlock Text="IPv4 компьютера" Classes="subtitle" /><TextBlock Text="{Binding LocalIpText}" FontSize="17" /></StackPanel></Border>
+        <Border Grid.Column="1" Classes="card" Padding="14"><StackPanel Spacing="5"><TextBlock Text="Подсеть / маска" Classes="subtitle" /><TextBlock Text="{Binding SubnetText}" FontSize="17" /><TextBlock Text="{Binding MaskText}" Classes="subtitle" /></StackPanel></Border>
+        <Border Grid.Column="2" Classes="card" Padding="14"><StackPanel Spacing="5"><TextBlock Text="Шлюз" Classes="subtitle" /><TextBlock Text="{Binding GatewayText}" FontSize="17" /></StackPanel></Border>
+        <Border Grid.Column="3" Classes="card" Padding="14"><StackPanel Spacing="5"><TextBlock Text="{Binding KnownCount, StringFormat='Известно: {0}'}" Classes="subtitle" /><TextBlock Text="{Binding OnlineCount, StringFormat='Online: {0}'}" FontSize="17" Foreground="{DynamicResource SignalBrush}" /></StackPanel></Border>
+      </Grid>
+      <WrapPanel Orientation="Horizontal">
+        <Button Content="Сканировать" Classes="primary" Command="{Binding ScanCommand}" Margin="0,0,10,6" />
+        <Button Content="Начать мониторинг" Command="{Binding StartMonitoringCommand}" Margin="0,0,10,6" />
+        <Button Content="Остановить" Command="{Binding StopMonitoringCommand}" Margin="0,0,18,6" />
+        <TextBlock Text="Интервал, сек:" VerticalAlignment="Center" Margin="0,0,10,6" />
+        <ComboBox ItemsSource="{Binding Intervals}" SelectedItem="{Binding SelectedInterval}" IsEnabled="{Binding CanConfigure}" Width="90" Margin="0,0,0,6" />
+      </WrapPanel>
+      <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />
+      <Border Classes="card" IsVisible="{Binding HasError}" BorderBrush="{DynamicResource ErrorBrush}" Padding="12">
+        <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" />
+      </Border>
+      <Border Classes="card" IsVisible="{Binding HasWarning}" BorderBrush="{DynamicResource WarningBrush}" Padding="12">
+        <TextBlock Text="{Binding WarningText}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" />
+      </Border>
+      <StackPanel IsVisible="{Binding IsBusy}" Spacing="6">
+        <ProgressBar Value="{Binding ProgressPercent}" Minimum="0" Maximum="100" Height="4" />
+        <TextBlock Text="{Binding ProgressText}" Classes="subtitle" />
+      </StackPanel>
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}" Height="3" />
+      <Grid ColumnDefinitions="*,190,180" ColumnSpacing="10">
+        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Поиск по IP, MAC или имени" />
+        <ComboBox Grid.Column="1" ItemsSource="{Binding StateFilters}" SelectedIndex="{Binding SelectedStateIndex}" HorizontalAlignment="Stretch" />
+        <ComboBox Grid.Column="2" ItemsSource="{Binding SortOptions}" SelectedIndex="{Binding SelectedSortIndex}" HorizontalAlignment="Stretch" />
+      </Grid>
+      <Border Classes="card" Padding="0" ClipToBounds="True" Height="320">
+        <Grid>
+          <TableView ItemsSource="{Binding Devices}" CanUserResizeColumns="True">
+            <TableView.Columns>
+              <TableViewColumn Header="IP" Binding="{ReflectionBinding Ip}" Width="135" />
+              <TableViewColumn Header="Роль" Binding="{ReflectionBinding Role}" Width="90" />
+              <TableViewColumn Header="MAC" Binding="{ReflectionBinding Mac}" Width="155" />
+              <TableViewColumn Header="Имя" Binding="{ReflectionBinding Hostname}" Width="150" />
+              <TableViewColumn Header="Ping" Binding="{ReflectionBinding Latency}" Width="70" />
+              <TableViewColumn Header="Состояние" Width="95">
+                <TableViewColumn.CellTemplate><DataTemplate x:DataType="vm:DeviceRowViewModel">
+                  <Grid ToolTip.Tip="{Binding StateDescription}">
+                    <TextBlock Text="{Binding State}" Foreground="{DynamicResource SignalBrush}" IsVisible="{Binding IsOnline}" />
+                    <TextBlock Text="{Binding State}" Foreground="{DynamicResource WarningBrush}" IsVisible="{Binding IsUnknown}" />
+                    <TextBlock Text="{Binding State}" Foreground="{DynamicResource MutedBrush}" IsVisible="{Binding IsOffline}" />
+                  </Grid>
+                </DataTemplate></TableViewColumn.CellTemplate>
+              </TableViewColumn>
+              <TableViewColumn Header="Последний раз" Binding="{ReflectionBinding LastSeen}" Width="135" />
+              <TableViewColumn Header="Первый раз" Binding="{ReflectionBinding FirstSeen}" Width="135" />
+            </TableView.Columns>
+          </TableView>
+          <TextBlock Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20" TextWrapping="Wrap" />
+        </Grid>
+      </Border>
+      <WrapPanel Orientation="Horizontal">
+        <TextBlock Text="{Binding LastScanText}" Classes="subtitle" Margin="0,0,24,0" />
+        <TextBlock Text="{Binding UnknownCount, StringFormat='Unknown: {0}'}" Classes="subtitle" Margin="0,0,18,0" />
+        <TextBlock Text="{Binding OfflineCount, StringFormat='Offline: {0}'}" Classes="subtitle" />
+      </WrapPanel>
+      <TextBlock Text="Отсутствие ответа не означает, что устройство выключено: возможны Client/AP Isolation, отдельная guest VLAN, сон телефона или фильтрация ICMP. MAC может быть приватным. История хранится до закрытия приложения." Classes="subtitle" FontSize="12" />
+    </StackPanel>
+  </ScrollViewer>
 </UserControl>
