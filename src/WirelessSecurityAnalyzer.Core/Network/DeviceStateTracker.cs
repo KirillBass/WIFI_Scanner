@@ -29,10 +29,16 @@ public sealed class DeviceStateTracker
                 (mac is null || d.Device.MacAddress is null || Equals(d.Device.MacAddress, mac)));
             var firstSeen = tracked?.Device.FirstSeen ?? observation.ObservedAt;
             var lastSeen = tracked is null || observation.ObservedAt > tracked.Device.LastSeen ? observation.ObservedAt : tracked.Device.LastSeen;
+            var identity = tracked?.Device.Identity;
+            if (identity is not null && observation.Hostname is not null)
+                identity = DeviceIdentityMerger.Merge(identity, new DeviceIdentity
+                { Hostname = observation.Hostname, HostnameSource = observation.IpAddress.Equals(result.Network.LocalIpv4)
+                    ? DeviceNameSource.LocalComputer : DeviceNameSource.ReverseDns });
             var device = new NetworkDevice(observation.IpAddress, mac ?? tracked?.Device.MacAddress,
-                observation.Hostname ?? tracked?.Device.Hostname, observation.Latency, DeviceState.Online,
+                identity?.Hostname ?? observation.Hostname ?? tracked?.Device.Hostname, observation.Latency, DeviceState.Online,
                 firstSeen, lastSeen, Equals(observation.IpAddress, result.Network.Gateway),
-                observation.IpAddress.Equals(result.Network.LocalIpv4), observation.Evidence);
+                observation.IpAddress.Equals(result.Network.LocalIpv4), observation.Evidence)
+            { Identity = identity, IsIdentityResolving = tracked?.Device.IsIdentityResolving ?? false };
             if (tracked is null) { tracked = new TrackedDevice(device); _devices.Add(tracked); }
             else { tracked.Device = device; tracked.MissedScans = 0; }
             seen.Add(tracked);
@@ -46,8 +52,31 @@ public sealed class DeviceStateTracker
                 Latency = null, Evidence = DeviceEvidence.None
             };
         }
-        return Array.AsReadOnly(_devices.Select(d => d.Device).OrderBy(d => SubnetCalculator.ToUInt32(d.IpAddress))
+        return Snapshot();
+    }
+
+    public IReadOnlyList<NetworkDevice> Snapshot() => Array.AsReadOnly(_devices.Select(d => d.Device).OrderBy(d => SubnetCalculator.ToUInt32(d.IpAddress))
             .ThenBy(d => d.FirstSeen).ToArray());
+
+    public IReadOnlyList<NetworkDevice> SetResolving(bool resolving)
+    {
+        foreach (var tracked in _devices)
+            tracked.Device = tracked.Device with { IsIdentityResolving = resolving && tracked.Device.State == DeviceState.Online };
+        return Snapshot();
+    }
+
+    public IReadOnlyList<NetworkDevice> Enrich(NetworkDevice expected, DeviceIdentity identity, bool isComplete = false)
+    {
+        // An old response must not name a different device that has since acquired the same IP.
+        var tracked = _devices.FirstOrDefault(d => d.Device.IpAddress.Equals(expected.IpAddress) &&
+            Equals(d.Device.MacAddress, expected.MacAddress) && d.Device.FirstSeen == expected.FirstSeen);
+        if (tracked is not null)
+        {
+            var merged = DeviceIdentityMerger.Merge(tracked.Device.Identity, identity);
+            tracked.Device = tracked.Device with { Identity = merged, Hostname = merged.Hostname ?? tracked.Device.Hostname,
+                IsIdentityResolving = !isComplete && tracked.Device.IsIdentityResolving };
+        }
+        return Snapshot();
     }
 
     public static bool ValidMac(PhysicalAddress? address)

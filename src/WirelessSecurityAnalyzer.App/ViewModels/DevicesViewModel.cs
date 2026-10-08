@@ -47,7 +47,7 @@ public sealed partial class DevicesViewModel : ViewModelBase
     public string MaskText => SelectedNetwork?.SubnetMask.ToString() ?? "—";
     public bool CanConfigure => !_stopped && !IsLoading && !IsBusy && !IsMonitoring;
     public bool CanDiscover => CanConfigure && SelectedNetwork is not null && _sweepAllowed;
-    public bool CanStop => !_stopped && (IsBusy || IsMonitoring);
+    public bool CanStop => !_stopped && (IsBusy || IsMonitoring || IsResolvingIdentities);
 
     [ObservableProperty] private LocalNetworkInfo? _selectedNetwork;
     [ObservableProperty] private string _searchText = string.Empty;
@@ -60,6 +60,8 @@ public sealed partial class DevicesViewModel : ViewModelBase
     private bool _isBusy;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanConfigure)), NotifyCanExecuteChangedFor(nameof(ScanCommand), nameof(StartMonitoringCommand), nameof(StopMonitoringCommand), nameof(RefreshInterfacesCommand))]
     private bool _isMonitoring;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(CanStop)), NotifyCanExecuteChangedFor(nameof(StopMonitoringCommand))]
+    private bool _isResolvingIdentities;
     [ObservableProperty] private string _statusText = "Определение локальной IPv4-сети…";
     [ObservableProperty] private string _errorMessage = string.Empty;
     [ObservableProperty] private bool _hasError;
@@ -161,12 +163,12 @@ public sealed partial class DevicesViewModel : ViewModelBase
         if (snapshot.Version < _snapshot.Version) return;
         _snapshot = snapshot;
         if (SelectedNetwork is { } selected && snapshot.Network is { } network && selected.HasSameContext(network)) RenderSnapshot();
-        else { IsBusy = snapshot.IsDiscovering; IsMonitoring = snapshot.IsMonitoring; }
+        else { IsBusy = snapshot.IsDiscovering; IsMonitoring = snapshot.IsMonitoring; IsResolvingIdentities = snapshot.IsResolvingIdentities; }
     }
 
     private void RenderSnapshot()
     {
-        IsBusy = _snapshot.IsDiscovering; IsMonitoring = _snapshot.IsMonitoring;
+        IsBusy = _snapshot.IsDiscovering; IsMonitoring = _snapshot.IsMonitoring; IsResolvingIdentities = _snapshot.IsResolvingIdentities;
         HasError = _snapshot.Error is not null;
         ErrorMessage = _snapshot.Error is { } error ? GetMessage(error) : string.Empty;
         if (_sweepAllowed) WarningText = _snapshot.Warning ?? string.Empty;
@@ -192,6 +194,7 @@ public sealed partial class DevicesViewModel : ViewModelBase
             ProgressText = $"{stage}: {p.Probed} / {p.Total} · подтверждено: {p.Found}";
         }
         StatusText = HasError ? "Операция не выполнена. Последние успешные результаты сохранены." : IsBusy ? "Обнаружение устройств локальной сети…" :
+            IsResolvingIdentities ? $"Найдено устройств: {KnownCount} · имена и производители определяются асинхронно…" :
             IsMonitoring ? "● Мониторинг активен · следующий цикл после завершения интервала" :
             _snapshot.LastCompletedAt is null ? "Нажмите «Сканировать», чтобы обнаружить устройства локальной сети." :
             _rows.All(r => r.Device.IsLocalMachine) ? "Другие активные устройства не обнаружены. Возможны Client Isolation, guest network или фильтрация ICMP." : $"Известно устройств: {KnownCount} · Online: {OnlineCount}";
@@ -203,7 +206,8 @@ public sealed partial class DevicesViewModel : ViewModelBase
         var state = SelectedStateIndex switch { 1 => DeviceState.Online, 2 => DeviceState.Unknown, 3 => DeviceState.Offline, _ => (DeviceState?)null };
         var filtered = _rows.Where(r => (state is null || r.Device.State == state) &&
             (query.Length == 0 || r.Ip.Contains(query, StringComparison.OrdinalIgnoreCase) || r.Mac.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-             r.Mac.Replace(":", "").Contains(query.Replace(":", "").Replace("-", ""), StringComparison.OrdinalIgnoreCase) || r.Hostname.Contains(query, StringComparison.OrdinalIgnoreCase)));
+             r.Mac.Replace(":", "").Contains(query.Replace(":", "").Replace("-", ""), StringComparison.OrdinalIgnoreCase) || r.Hostname.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+             r.Device.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) || r.Vendor.Contains(query, StringComparison.OrdinalIgnoreCase)));
         var sorted = SelectedSortIndex switch
         {
             1 => filtered.OrderBy(r => r.Device.Latency?.TotalMilliseconds ?? double.MaxValue).ThenBy(r => SubnetCalculator.ToUInt32(r.Device.IpAddress)),

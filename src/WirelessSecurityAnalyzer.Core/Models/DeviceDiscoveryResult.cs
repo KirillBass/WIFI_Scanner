@@ -21,4 +21,7 @@ public sealed record HostProbeResult(bool Replied, TimeSpan? Latency, bool Route
 public sealed record DeviceMonitorSnapshot(long Version, LocalNetworkInfo? Network,
     IReadOnlyList<NetworkDevice> Devices, bool IsMonitoring, bool IsDiscovering, TimeSpan Interval,
     DeviceDiscoveryProgress? Progress, DateTimeOffset? LastCompletedAt,
-    NetworkDiscoveryException? Error, string? Warning);
+    NetworkDiscoveryException? Error, string? Warning)
+{
+    public bool IsResolvingIdentities { get; init; }
+}

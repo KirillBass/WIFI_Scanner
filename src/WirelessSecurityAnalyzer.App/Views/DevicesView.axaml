@@ -39,19 +39,29 @@
         <TextBlock Text="{Binding ProgressText}" Classes="subtitle" />
       </StackPanel>
       <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}" Height="3" />
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsResolvingIdentities}" Height="3" />
       <Grid ColumnDefinitions="*,190,180" ColumnSpacing="10">
-        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Поиск по IP, MAC или имени" />
+        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Поиск по IP, MAC, имени или производителю" />
         <ComboBox Grid.Column="1" ItemsSource="{Binding StateFilters}" SelectedIndex="{Binding SelectedStateIndex}" HorizontalAlignment="Stretch" />
         <ComboBox Grid.Column="2" ItemsSource="{Binding SortOptions}" SelectedIndex="{Binding SelectedSortIndex}" HorizontalAlignment="Stretch" />
       </Grid>
       <Border Classes="card" Padding="0" ClipToBounds="True" Height="320">
         <Grid>
-          <TableView ItemsSource="{Binding Devices}" CanUserResizeColumns="True">
+          <TableView ItemsSource="{Binding Devices}" CanUserResizeColumns="True" ScrollViewer.AllowAutoHide="False">
             <TableView.Columns>
               <TableViewColumn Header="IP" Binding="{ReflectionBinding Ip}" Width="135" />
               <TableViewColumn Header="Роль" Binding="{ReflectionBinding Role}" Width="90" />
+              <TableViewColumn Header="Имя устройства" Width="180">
+                <TableViewColumn.CellTemplate><DataTemplate x:DataType="vm:DeviceRowViewModel">
+                  <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding IdentityDetails}" />
+                </DataTemplate></TableViewColumn.CellTemplate>
+              </TableViewColumn>
+              <TableViewColumn Header="Производитель" Width="170">
+                <TableViewColumn.CellTemplate><DataTemplate x:DataType="vm:DeviceRowViewModel">
+                  <TextBlock Text="{Binding Vendor}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding IdentityDetails}" />
+                </DataTemplate></TableViewColumn.CellTemplate>
+              </TableViewColumn>
               <TableViewColumn Header="MAC" Binding="{ReflectionBinding Mac}" Width="155" />
-              <TableViewColumn Header="Имя" Binding="{ReflectionBinding Hostname}" Width="150" />
               <TableViewColumn Header="Ping" Binding="{ReflectionBinding Latency}" Width="70" />
               <TableViewColumn Header="Состояние" Width="95">
                 <TableViewColumn.CellTemplate><DataTemplate x:DataType="vm:DeviceRowViewModel">

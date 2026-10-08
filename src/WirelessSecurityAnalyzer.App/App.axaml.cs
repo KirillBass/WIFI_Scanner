@@ -12,6 +12,7 @@ using WirelessSecurityAnalyzer.Infrastructure.Windows.Services;
 using WirelessSecurityAnalyzer.Infrastructure.Windows.Wifi;
 using WirelessSecurityAnalyzer.Core.Network;
 using WirelessSecurityAnalyzer.Infrastructure.Windows.Network;
+using WirelessSecurityAnalyzer.Infrastructure.Windows.Network.Identity;
 
 namespace WirelessSecurityAnalyzer.App;
 
@@ -36,7 +37,19 @@ public partial class App : Application
             services.AddSingleton<IChannelOverlapModel, ChannelOverlapCalculator>();
             services.AddSingleton<IChannelCandidateProvider, WifiChannelCatalog>();
             services.AddSingleton<IChannelAnalyzer, ChannelAnalyzer>();
-            services.AddSingleton(new DeviceDiscoveryOptions());
+            services.AddSingleton(new DeviceDiscoveryOptions { ResolveHostnames = false });
+            services.AddSingleton(new DeviceIdentityOptions());
+            services.AddSingleton<DeviceIdentityCache>();
+            services.AddSingleton<MacVendorResolver>();
+            services.AddSingleton<IIdentityDatagramClient, IdentityDatagramClient>();
+            services.AddSingleton<IUpnpDescriptionClient, UpnpDescriptionClient>();
+            services.AddSingleton<IDeviceNameResolver, LocalComputerNameResolver>();
+            services.AddSingleton<IDeviceNameResolver, ReverseDnsNameResolver>();
+            services.AddSingleton<IDeviceNameResolver, NetBiosNameResolver>();
+            services.AddSingleton<IDeviceNameResolver, LlmnrNameResolver>();
+            services.AddSingleton<INetworkIdentityResolver, MdnsNameResolver>();
+            services.AddSingleton<INetworkIdentityResolver, SsdpDeviceResolver>();
+            services.AddSingleton<IDeviceIdentityResolver, DeviceIdentityResolver>();
             services.AddSingleton<ILocalNetworkService, WindowsLocalNetworkService>();
             services.AddSingleton<INeighborTableReader, WindowsNeighborTableReader>();
             services.AddSingleton<IHostProbe, PingHostProbe>();

@@ -173,6 +173,14 @@ DevicesViewModel переносит snapshot/progress на UI Dispatcher и иг
 
 API сверены с [документацией GetIpNetTable2/FreeMibTable](https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-getipnettable2) и [состояний MIB_IPNET_ROW2](https://learn.microsoft.com/en-us/windows/win32/api/netioapi/ns-netioapi-mib_ipnet_row2); ABI также проверен локальными тестами layout.
 
+## Device Identity — расширение Milestone 4
+
+Функционал включён в [Version 5 (5.0.0)](https://github.com/KirillBass/WIFI_Scanner/releases/tag/v5.0.0). Это расширение реализованных Milestones 1–4; номер релиза не обозначает отдельный Milestone 5.
+
+Поверх существующего обнаружения добавлено асинхронное определение hostname/friendly name/vendor/model/type и источников отдельных полей. До окончания identity строка уже доступна; LastSeen/state по имени не обновляются. Resolver-ы: LocalComputer, Reverse DNS только к DNS выбранной подсети с RD=0, mDNS/DNS-SD network cycle, NBSTAT UDP 137, LLMNR reverse PTR TCP 5355, SSDP/UPnP read-only и embedded OUI MA-L/MA-M/MA-S.
+
+Cache 15 минут, MAC-first/IP fallback и scope сети, controlled concurrency, cancellation/Stop/shutdown, source priority, private-MAC detection, таблица vendor/display/tooltip реализованы. Низкоуровневый discovery и функции этапов 1–4 сохранены; новых NuGet-пакетов нет. Restore/build/publish успешны, Release 0 warnings/errors; локально 333 passed, 0 failed, 2 Windows hardware skipped. Production startup/DI и отдельный GUI preview проверены. Прежние описания системного DNS/5-минутного hostname cache выше относятся к исходному Milestone 4; актуальный путь описан в [техническом отчёте](DEVICE_IDENTITY_REPORT.md), содержащем все 14 пунктов ТЗ и итоговые проверки.
+
 ## Оставшиеся этапы
 
 1. Аппаратная проверка четырёх реализованных этапов на Windows с Wi-Fi/Ethernet адаптером, включая настоящее обнаружение телефона/роутера и исчезновение интерфейса.

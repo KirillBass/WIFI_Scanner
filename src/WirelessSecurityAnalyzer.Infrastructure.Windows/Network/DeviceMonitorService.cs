@@ -6,7 +6,8 @@ using WirelessSecurityAnalyzer.Core.Network;
 namespace WirelessSecurityAnalyzer.Infrastructure.Windows.Network;
 
 /// <summary>Owns manual discovery and a single scan/delay monitoring loop, with session state.</summary>
-public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILogger logger, TimeProvider? timeProvider = null)
+public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILogger logger, TimeProvider? timeProvider = null,
+    IDeviceIdentityResolver? identityResolver = null)
     : IDeviceMonitorService, IDisposable
 {
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
@@ -17,6 +18,8 @@ public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILog
         false, false, TimeSpan.FromSeconds(30), null, null, null, null);
     private CancellationTokenSource? _cancellation;
     private Task _worker = Task.CompletedTask;
+    private CancellationTokenSource? _identityCancellation;
+    private Task _identityWorker = Task.CompletedTask;
     private bool _disposed;
 
     public DeviceMonitorSnapshot Current { get { lock (_dataGate) return _snapshot; } }
@@ -28,6 +31,8 @@ public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILog
         await _lifecycle.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            EnsureIdle();
+            await StopIdentityAsync().ConfigureAwait(false);
             Prepare(network, options, false, TimeSpan.FromSeconds(30), cancellationToken);
             worker = _worker = Task.Run(() => RunAsync(network, options, false, cancellationToken: _cancellation!.Token), CancellationToken.None);
         }
@@ -43,6 +48,8 @@ public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILog
         await _lifecycle.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            EnsureIdle();
+            await StopIdentityAsync().ConfigureAwait(false);
             Prepare(network, options, true, period, cancellationToken);
             _worker = Task.Run(() => RunAsync(network, options, true, period, _cancellation!.Token), CancellationToken.None);
             logger.Information("Device monitoring started; interval {IntervalSeconds}s", period.TotalSeconds);
@@ -70,6 +77,13 @@ public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILog
             LastCompletedAt = changed ? null : s.LastCompletedAt });
     }
 
+    private void EnsureIdle()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_worker.IsCompleted || Current.IsMonitoring || Current.IsDiscovering)
+            throw new NetworkDiscoveryException(NetworkDiscoveryError.Busy, "Another discovery operation is running.");
+    }
+
     private async Task RunAsync(LocalNetworkInfo network, DeviceDiscoveryOptions options, bool monitoring,
         TimeSpan? interval = null, CancellationToken cancellationToken = default)
     {
@@ -86,6 +100,14 @@ public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILog
                     cancellationToken.ThrowIfCancellationRequested();
                     Change(s => s with { Devices = _tracker.Apply(result, options.OfflineAfterMissedScans),
                         IsDiscovering = false, LastCompletedAt = result.CompletedAt, Warning = result.Warning, Error = null });
+                    // The discovery snapshot is already published. Name lookups run independently
+                    // of the scan/delay loop, and are replaced only at a completed discovery cycle.
+                    if (identityResolver is not null)
+                    {
+                        await StopIdentityAsync().ConfigureAwait(false);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        BeginIdentity(network, cancellationToken);
+                    }
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
                 catch (Exception exception)
@@ -114,10 +136,39 @@ public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILog
         {
             _cancellation?.Cancel();
             await _worker.ConfigureAwait(false);
+            await StopIdentityAsync().ConfigureAwait(false);
             _cancellation?.Dispose();
             _cancellation = null;
         }
         finally { _lifecycle.Release(); }
+    }
+
+    private void BeginIdentity(LocalNetworkInfo network, CancellationToken token)
+    {
+        _identityCancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var identityToken = _identityCancellation.Token;
+        Change(s => s with { Devices = _tracker.SetResolving(true), IsResolvingIdentities = true });
+        var devices = Current.Devices;
+        _identityWorker = Task.Run(async () =>
+        {
+            try
+            {
+                await identityResolver!.EnrichAsync(network, devices, update => Change(s =>
+                    identityToken.IsCancellationRequested || s.Network?.HasSameContext(network) != true ? s :
+                    s with { Devices = _tracker.Enrich(update.Device, update.Identity, update.IsComplete) }), identityToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (identityToken.IsCancellationRequested) { }
+            catch (Exception exception) { logger.Warning(exception, "Device identity enrichment failed; discovery results retained"); }
+            finally { Change(s => s with { Devices = _tracker.SetResolving(false), IsResolvingIdentities = false }); }
+        }, CancellationToken.None);
+    }
+
+    private async Task StopIdentityAsync()
+    {
+        _identityCancellation?.Cancel();
+        await _identityWorker.ConfigureAwait(false);
+        _identityCancellation?.Dispose();
+        _identityCancellation = null;
     }
 
     private void Change(Func<DeviceMonitorSnapshot, DeviceMonitorSnapshot> update)
@@ -135,6 +186,7 @@ public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILog
         if (_disposed) return;
         _disposed = true;
         _cancellation?.Cancel();
+        _identityCancellation?.Cancel();
     }
 
     private sealed class InlineProgress(Action<DeviceDiscoveryProgress> report) : IProgress<DeviceDiscoveryProgress>
