@@ -6,6 +6,8 @@ using Serilog;
 using WirelessSecurityAnalyzer.App.ViewModels;
 using WirelessSecurityAnalyzer.App.Views;
 using WirelessSecurityAnalyzer.Core.Interfaces;
+using WirelessSecurityAnalyzer.Core.Analysis.Channels;
+using WirelessSecurityAnalyzer.Core.Models;
 using WirelessSecurityAnalyzer.Infrastructure.Windows.Services;
 using WirelessSecurityAnalyzer.Infrastructure.Windows.Wifi;
 
@@ -28,6 +30,10 @@ public partial class App : Application
             services.AddSingleton<IWifiScanState>(p => p.GetRequiredService<WifiScanService>());
             services.AddSingleton<IWifiAdapterService>(p => p.GetRequiredService<WindowsWifiScanner>());
             services.AddSingleton<IWifiMonitorService, WifiMonitorService>();
+            services.AddSingleton(new ChannelAnalysisOptions());
+            services.AddSingleton<IChannelOverlapModel, ChannelOverlapCalculator>();
+            services.AddSingleton<IChannelCandidateProvider, WifiChannelCatalog>();
+            services.AddSingleton<IChannelAnalyzer, ChannelAnalyzer>();
             services.AddSingleton<ISystemSettingsService, WindowsSystemSettingsService>();
             services.AddSingleton<AccessPointsViewModel>();
             services.AddSingleton<DashboardViewModel>();

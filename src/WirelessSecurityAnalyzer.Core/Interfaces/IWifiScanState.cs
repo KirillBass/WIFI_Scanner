@@ -7,4 +7,6 @@ public interface IWifiScanState
 {
     WifiScanSnapshot? Current { get; }
     event EventHandler<WifiScanSnapshot>? Updated;
+    WifiScanFailure? LastFailure { get; }
+    event EventHandler<WifiScanFailure>? Failed;
 }

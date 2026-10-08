@@ -9,11 +9,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 {
     private readonly AccessPointsViewModel _accessPoints;
     private readonly SignalViewModel _signal;
+    private readonly ChannelsViewModel _channels;
     public MainWindowViewModel(DashboardViewModel dashboard, AccessPointsViewModel accessPoints,
         ChannelsViewModel channels, SignalViewModel signal, DevicesViewModel devices, SettingsViewModel settings)
     {
         _accessPoints = accessPoints;
         _signal = signal;
+        _channels = channels;
         Navigation = [new("Обзор", dashboard), new("Эфир", accessPoints), new("Каналы", channels),
             new("Сигнал", signal), new("Устройства", devices), new("Настройки", settings)];
         _selectedNavigation = Navigation[1];
@@ -31,11 +33,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         _accessPoints.Stop();
         _signal.Stop();
+        _channels.Stop();
     }
 
     public async Task StopAsync()
     {
         Stop();
-        await Task.WhenAll(_accessPoints.StopAsync(), _signal.StopAsync(), InitializeCommand.ExecutionTask ?? Task.CompletedTask);
+        await Task.WhenAll(_accessPoints.StopAsync(), _signal.StopAsync(), _channels.StopAsync(),
+            InitializeCommand.ExecutionTask ?? Task.CompletedTask);
     }
 }
