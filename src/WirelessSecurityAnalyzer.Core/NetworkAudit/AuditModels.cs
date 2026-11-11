@@ -6,7 +6,7 @@ namespace WirelessSecurityAnalyzer.Core.NetworkAudit;
 public enum PortState { Open, Closed, Timeout, Unavailable, Error }
 public enum AuditStage { Idle, Preparing, Scanning, Detecting, Completed, Cancelled, NetworkChanged, Failed }
 public enum ServiceConfidence { Unknown, Low, Medium, High }
-public enum PortProfile { Quick, Standard, Full, Custom }
+public enum PortProfile { Quick, Standard, Full, Custom, Targeted }
 public sealed record AuditTarget(IPAddress Address, string Name, bool IsLocal, bool IsGateway);
 public sealed record PortScanResult(IPAddress Address, int Port, PortState State, TimeSpan Elapsed, string? Error = null);
 public sealed record ServiceIdentity(string Protocol, string? Product, string? Version,
@@ -17,6 +17,7 @@ public sealed record ServiceIdentity(string Protocol, string? Product, string? V
 public sealed record AuditRow(Guid SessionId, AuditTarget Target, int Port, ServiceIdentity Service,
     DateTimeOffset DetectedAt, PortProfile Profile)
 {
+    public Guid AuditId { get; init; }
     public string Address => Target.Address.ToString();
     public string Name => Target.Name;
     public string Transport => "TCP";
@@ -24,6 +25,7 @@ public sealed record AuditRow(Guid SessionId, AuditTarget Target, int Port, Serv
     public string Product => Service.Product ?? "-";
     public string Version => Service.Version ?? "-";
     public string Confidence => Service.Confidence.ToString();
+    public string CheckedAtText => DetectedAt.ToLocalTime().ToString("dd.MM HH:mm:ss");
     public string Details => $"{Address}:{Port} · {Name}\nTCP · {Protocol} · {Product} · {Version}\nДостоверность: {Confidence}\nПрофиль: {Profile} · {DetectedAt:dd.MM.yyyy HH:mm:ss}\n{Service.Evidence}\n{Service.Metadata}";
 }
 public sealed record AuditProgress(int HostsCompleted, int HostsTotal, long Checked, long Total,
@@ -31,6 +33,10 @@ public sealed record AuditProgress(int HostsCompleted, int HostsTotal, long Chec
 public sealed record AuditSnapshot(long Version, Guid AuditId, Guid SessionId, AuditStage Stage, bool IsRunning,
     IReadOnlyList<AuditRow> Rows, AuditProgress Progress, string Message)
 {
+    public IReadOnlyList<TargetHostSummary> Hosts { get; init; } = [];
+    public IReadOnlyList<int> CheckedPorts { get; init; } = [];
+    public PortProfile Profile { get; init; }
+    public string ScopeNote { get; init; } = "";
     public static AuditSnapshot Empty { get; } = new(0, Guid.Empty, Guid.Empty, AuditStage.Idle, false, [],
         new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, TimeSpan.Zero), "Аудит ещё не запускался.");
 }
@@ -61,6 +67,8 @@ public interface IServiceDetector
 public interface IServiceDetectionEngine
 {
     Task<ServiceIdentity> DetectAsync(LocalNetworkInfo network, PortScanConnection connection, CancellationToken cancellationToken);
+    Task<ServiceIdentity> DetectTargetedAsync(LocalNetworkInfo network, PortScanConnection connection, CancellationToken cancellationToken) =>
+        DetectAsync(network, connection, cancellationToken);
 }
 public interface INetworkAuditService
 {

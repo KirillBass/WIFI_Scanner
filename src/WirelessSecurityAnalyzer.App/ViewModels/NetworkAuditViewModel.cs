@@ -14,8 +14,12 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     private readonly IWifiConnectionService _connections;
     private readonly INetworkAuditService? _audit;
     private IReadOnlyList<AuditRow> _allRows = [];
+    private AuditSnapshot _snapshot = AuditSnapshot.Empty;
     private long _version = -1;
     private bool _disposed;
+    private readonly object _dispatchGate = new();
+    private AuditSnapshot? _pendingSnapshot;
+    private bool _updateQueued;
     public NetworkAuditViewModel(NetworkSessionViewModel session, DevicesViewModel devices, IWifiConnectionService connections,
         INetworkAuditService? audit = null)
     {
@@ -29,6 +33,35 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     public IReadOnlyList<string> Profiles { get; } = ["Быстрый", "Стандартный (1–1024 + основные)", "Полный (1–65535)", "Пользовательский"];
     public IReadOnlyList<string> ServiceFilters { get; } = ["Все службы", "HTTP", "HTTPS", "SSH", "FTP", "RDP", "SMB", "SMTP", "TLS", "Unknown"];
     public ObservableCollection<AuditRow> Rows { get; } = [];
+    public ObservableCollection<TargetHostSummary> Hosts { get; } = [];
+    public IReadOnlyList<string> DisplayModes { get; } = ["Все результаты", "Только SMB / FTP / Web"];
+    public bool IsTargetOnly => SelectedDisplayModeIndex == 1;
+    public bool IsPreparingDiscovery => IsAuditing && _snapshot.Stage == AuditStage.Preparing && Devices.IsBusy;
+    public bool IsResultsEmpty => Rows.Count == 0;
+    public int MatchedHostCount => _snapshot.Hosts.Count(h => h.HasMatch);
+    public int MatchedEndpointCount => _snapshot.Hosts.Sum(h => h.EndpointCount);
+    public string CheckedPortsText => _snapshot.AuditId == Guid.Empty ? "Порты ещё не проверялись." :
+        $"{(_snapshot.Profile == PortProfile.Targeted ? "Целевой поиск" : "Обычный аудит")}. TCP-порты текущего запуска: {PortScanProfiles.Describe(_snapshot.CheckedPorts)}";
+    public string ScopeNote => _snapshot.ScopeNote;
+    public string TargetStatusText
+    {
+        get
+        {
+            if (_snapshot.AuditId == Guid.Empty) return "Проверка целевых служб ещё не выполнена.";
+            var pending = _snapshot.Hosts.Count(h => h.State == TargetHostState.Pending);
+            var scanning = _snapshot.Hosts.Count(h => h.State == TargetHostState.Scanning);
+            var partial = _snapshot.Hosts.Count(h => h.IsPartial);
+            var counts = $"Подходящих узлов: {MatchedHostCount}; подтверждённых целевых служб: {MatchedEndpointCount}.";
+            if (_snapshot.IsRunning) return $"{counts} Проверено узлов: {_snapshot.Progress.HostsCompleted}/{_snapshot.Progress.HostsTotal}. Ожидают: {pending}; проверяются: {scanning}.";
+            if (_snapshot.Stage is AuditStage.Cancelled or AuditStage.Failed or AuditStage.NetworkChanged || partial > 0)
+                return $"{counts} Проверка неполная. Найденные совпадения сохранены; непроверенные и неответившие узлы не считаются узлами без служб.";
+            return MatchedHostCount > 0 ? counts : "Не найдено подтверждённых SMB/FTP/HTTP/HTTPS-служб среди проверенных портов.";
+        }
+    }
+    public string EmptyResultsText => IsTargetOnly ? MatchedHostCount > 0
+        ? "Нет целевых служб, соответствующих дополнительным фильтрам." : TargetStatusText
+        : _snapshot.AuditId == Guid.Empty ? "Аудит ещё не выполнялся." : _snapshot.IsRunning
+            ? "Проверка продолжается; результатов для отображения пока нет." : "Нет результатов для выбранных фильтров.";
     public bool CanConfigure => !IsAuditing && !IsBusy;
     public bool HasError => ErrorMessage.Length > 0;
     public bool HasFilterError => FilterError.Length > 0;
@@ -36,15 +69,17 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     public bool IsFullProfile => SelectedProfileIndex == 2;
     public string SelectionDetails => SelectedRow?.Details ?? "Выберите строку, чтобы увидеть ответ протокола и сведения об определении службы.";
     public string ResultCount => $"Показано: {Rows.Count} из {_allRows.Count}";
-    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(RefreshDevicesCommand), nameof(DisconnectCommand), nameof(StartAuditCommand)), NotifyPropertyChangedFor(nameof(CanConfigure))]
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(RefreshDevicesCommand), nameof(DisconnectCommand), nameof(StartAuditCommand), nameof(FindTargetServersCommand)), NotifyPropertyChangedFor(nameof(CanConfigure))]
     private bool _isBusy;
-    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(RefreshDevicesCommand), nameof(StartAuditCommand), nameof(StopAuditCommand)), NotifyPropertyChangedFor(nameof(CanConfigure))]
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(RefreshDevicesCommand), nameof(StartAuditCommand), nameof(FindTargetServersCommand), nameof(StopAuditCommand)), NotifyPropertyChangedFor(nameof(CanConfigure))]
     private bool _isAuditing;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasError))] private string _errorMessage = string.Empty;
     [ObservableProperty] private string _statusText = "Аудит ещё не запускался.";
     [ObservableProperty] private string _progressText = string.Empty;
     [ObservableProperty] private double _progressPercent;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(IsCustomProfile), nameof(IsFullProfile))] private int _selectedProfileIndex;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(IsTargetOnly))] private int _selectedDisplayModeIndex;
+    [ObservableProperty] private string _additionalTargetPorts = string.Empty;
     [ObservableProperty] private string _customPorts = "22,80,443,8000-8010";
     [ObservableProperty] private bool _includeLocal = true;
     [ObservableProperty] private int _concurrency = 64;
@@ -54,12 +89,13 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasFilterError))] private string _filterError = string.Empty;
     [ObservableProperty] private int _selectedServiceIndex;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(SelectionDetails))] private AuditRow? _selectedRow;
+    partial void OnSelectedDisplayModeIndexChanged(int value) => FilterRows();
     partial void OnSearchTextChanged(string value) => FilterRows();
     partial void OnPortFilterChanged(string value) => FilterRows();
     partial void OnSelectedServiceIndexChanged(int value) => FilterRows();
     private bool CanRefreshDevices() => Session.IsReady && !IsBusy && !IsAuditing && !Devices.IsBusy && !Devices.IsMonitoring;
     private bool CanDisconnect() => Session.IsConnected && !Session.IsConnecting && !IsBusy;
-    private bool CanStartAudit() => _audit is not null && Session.IsReady && !IsBusy && !IsAuditing && !Devices.IsBusy;
+    private bool CanStartAudit() => _audit is not null && !_audit.Current.IsRunning && Session.IsReady && !IsBusy && !IsAuditing && !Devices.IsBusy;
     private bool CanStopAudit() => IsAuditing;
     [RelayCommand(CanExecute = nameof(CanRefreshDevices))]
     private async Task RefreshDevicesAsync()
@@ -82,7 +118,19 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     {
         if (!CanStartAudit() || _audit is null) return;
         ErrorMessage = string.Empty;
+        SelectedDisplayModeIndex = 0;
         try { await _audit.RunAsync(new((PortProfile)SelectedProfileIndex, CustomPorts, IncludeLocal, Concurrency, ConnectTimeoutMs)); }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { ErrorMessage = ex.Message; }
+        catch (OperationCanceledException) { }
+    }
+    [RelayCommand(CanExecute = nameof(CanStartAudit))]
+    private async Task FindTargetServersAsync()
+    {
+        if (!CanStartAudit() || _audit is null || Session.Current.Network is not { } network) return;
+        ErrorMessage = string.Empty;
+        SelectedDisplayModeIndex = 1;
+        Devices.UseSessionNetwork(network);
+        try { await _audit.RunAsync(new(PortProfile.Targeted, AdditionalTargetPorts, IncludeLocal, Concurrency, ConnectTimeoutMs)); }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { ErrorMessage = ex.Message; }
         catch (OperationCanceledException) { }
     }
@@ -90,19 +138,33 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     private Task StopAuditAsync() => StopAsync();
     private void OnAuditUpdated(object? sender, AuditSnapshot snapshot)
     {
-        if (Dispatcher.UIThread.CheckAccess()) Apply(snapshot);
-        else Dispatcher.UIThread.Post(() => Apply(snapshot));
+        if (Dispatcher.UIThread.CheckAccess()) { Apply(snapshot); return; }
+        lock (_dispatchGate)
+        {
+            if (_pendingSnapshot is null || snapshot.Version > _pendingSnapshot.Version) _pendingSnapshot = snapshot;
+            if (_updateQueued) return;
+            _updateQueued = true;
+        }
+        Dispatcher.UIThread.Post(() =>
+        {
+            AuditSnapshot? latest;
+            lock (_dispatchGate) { latest = _pendingSnapshot; _pendingSnapshot = null; _updateQueued = false; }
+            if (latest is not null) Apply(latest);
+        });
     }
     private void Apply(AuditSnapshot snapshot, bool force = false)
     {
         if (_disposed || !force && snapshot.Version <= _version) return;
+        if (_audit is not null && snapshot.AuditId != _audit.Current.AuditId) return;
         _version = Math.Max(_version, snapshot.Version);
         IsAuditing = snapshot.IsRunning; StatusText = snapshot.Message;
         var p = snapshot.Progress;
         ProgressPercent = p.Total == 0 ? 0 : 100d * p.Checked / p.Total;
         ProgressText = $"Устройства: {p.HostsCompleted}/{p.HostsTotal} · TCP-порты: {p.Checked}/{p.Total} · Открыто: {p.Open} · Служб подтверждено: {p.Identified}\nЗакрыто: {p.Closed} · Таймаут: {p.TimedOut} · Недоступно: {p.Unavailable} · Ошибки: {p.Errors} · Время: {p.Elapsed:hh\\:mm\\:ss}";
         // A queued update from the previous session must not put old rows back into the UI.
-        _allRows = snapshot.SessionId == Session.Current.SessionId && Session.IsReady ? snapshot.Rows : [];
+        _snapshot = snapshot.SessionId == Session.Current.SessionId && Session.IsReady ? snapshot : AuditSnapshot.Empty;
+        _allRows = _snapshot.Rows.Where(r => r.SessionId == _snapshot.SessionId && r.AuditId == _snapshot.AuditId).ToArray();
+        foreach (var property in new[] { nameof(MatchedHostCount), nameof(MatchedEndpointCount), nameof(TargetStatusText), nameof(CheckedPortsText), nameof(ScopeNote), nameof(IsPreparingDiscovery) }) OnPropertyChanged(property);
         FilterRows();
     }
     private void FilterRows()
@@ -113,19 +175,25 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         FilterError = valid ? "" : "Фильтр порта: число от 1 до 65535.";
         var service = SelectedServiceIndex > 0 && SelectedServiceIndex < ServiceFilters.Count ? ServiceFilters[SelectedServiceIndex] : "";
         var search = SearchText.Trim();
-        var rows = _allRows.Where(r => valid && (port == 0 || r.Port == port) &&
+        var rows = _allRows.Where(r => (!IsTargetOnly || TargetServiceMatcher.Matches(r, _snapshot.SessionId, _snapshot.AuditId)) && valid && (port == 0 || r.Port == port) &&
             (service.Length == 0 || (service == "SMB" ? r.Protocol.StartsWith("SMB", StringComparison.Ordinal) : r.Protocol == service)) &&
             (search.Length == 0 || $"{r.Address} {r.Name} {r.Protocol} {r.Product} {r.Version}".Contains(search, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(r => Convert.ToHexString(r.Target.Address.GetAddressBytes()), StringComparer.Ordinal).ThenBy(r => r.Port).ToArray();
         SynchronizeRows(Rows, rows);
+        var addresses = rows.Select(r => r.Target.Address).ToHashSet();
+        var hasEndpointFilter = search.Length > 0 || portText.Length > 0 || service.Length > 0;
+        SynchronizeRows(Hosts, _snapshot.Hosts.Where(h => h.SessionId == _snapshot.SessionId && h.AuditId == _snapshot.AuditId &&
+            (!IsTargetOnly || h.HasMatch) && (!hasEndpointFilter || addresses.Contains(h.Target.Address))).ToArray());
+        OnPropertyChanged(nameof(IsResultsEmpty)); OnPropertyChanged(nameof(EmptyResultsText));
         SelectedRow = selected is null ? null : rows.FirstOrDefault(r => r.Target.Address.Equals(selected.Target.Address) && r.Port == selected.Port);
         OnPropertyChanged(nameof(ResultCount));
     }
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
     {
         OnPropertyChanged(nameof(DeviceCount));
+        OnPropertyChanged(nameof(IsPreparingDiscovery));
         if (ReferenceEquals(sender, Session) && _audit is not null) Apply(_audit.Current, force: true);
-        RefreshDevicesCommand.NotifyCanExecuteChanged(); DisconnectCommand.NotifyCanExecuteChanged(); StartAuditCommand.NotifyCanExecuteChanged();
+        RefreshDevicesCommand.NotifyCanExecuteChanged(); DisconnectCommand.NotifyCanExecuteChanged(); StartAuditCommand.NotifyCanExecuteChanged(); FindTargetServersCommand.NotifyCanExecuteChanged();
     }
     public Task StopAsync() => _audit?.StopAsync() ?? Task.CompletedTask;
     public void Dispose()

@@ -13,7 +13,7 @@
     <ContentControl Grid.Row="1" Content="{Binding CurrentPage}" Margin="12" />
     <Border Grid.Row="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12,4">
       <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Text="Wireless Security Analyzer · версия 8" Classes="subtitle" FontSize="11" />
+        <TextBlock Text="Wireless Security Analyzer · версия 9" Classes="subtitle" FontSize="11" />
         <TextBlock Grid.Column="1" Text="{Binding Session.Summary, TargetNullValue='○ Нет подключения'}" Classes="subtitle" FontSize="11"
                    TextTrimming="CharacterEllipsis" MaxWidth="700" ToolTip.Tip="{Binding Session.Summary}" />
       </Grid>

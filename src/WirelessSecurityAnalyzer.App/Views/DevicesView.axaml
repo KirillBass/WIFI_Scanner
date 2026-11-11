@@ -40,9 +40,9 @@
       <Border Classes="card" IsVisible="{Binding HasWarning}" BorderBrush="{DynamicResource WarningBrush}" Padding="12">
         <TextBlock Text="{Binding WarningText}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" />
       </Border>
-      <StackPanel IsVisible="{Binding IsBusy}" Spacing="6">
+      <StackPanel IsVisible="{Binding HasProgress}" Spacing="6">
         <ProgressBar Value="{Binding ProgressPercent}" Minimum="0" Maximum="100" Height="4" />
-        <TextBlock Text="{Binding ProgressText}" Classes="subtitle" />
+        <TextBlock Text="{Binding ProgressText}" Classes="subtitle" TextWrapping="Wrap" />
       </StackPanel>
       <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}" Height="3" />
       <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsResolvingIdentities}" Height="3" />
@@ -92,7 +92,7 @@
         <TextBlock Text="{Binding UnknownCount, StringFormat='Unknown: {0}'}" Classes="subtitle" Margin="0,0,18,0" />
         <TextBlock Text="{Binding OfflineCount, StringFormat='Offline: {0}'}" Classes="subtitle" />
       </WrapPanel>
-      <TextBlock Text="Отсутствие ответа не означает, что устройство выключено: возможны Client/AP Isolation, отдельная guest VLAN, сон телефона или фильтрация ICMP. MAC может быть приватным. История хранится до закрытия приложения." Classes="subtitle" FontSize="12" />
+      <TextBlock Text="Некоторые устройства могут быть недоступны, если беспроводная сеть использует изоляцию клиентов или сетевые правила запрещают обмен между узлами. Сон устройства и фильтрация ICMP также ограничивают обнаружение. MAC может быть приватным. История хранится до закрытия приложения." Classes="subtitle" FontSize="12" TextWrapping="Wrap" />
     </StackPanel>
   </ScrollViewer>
 </UserControl>

@@ -21,7 +21,8 @@
       </Expander>
       <WrapPanel>
         <Button Content="Обновить устройства" Command="{Binding RefreshDevicesCommand}" Margin="0,0,8,4" />
-        <Button Content="Начать аудит сети" Command="{Binding StartAuditCommand}" Margin="0,0,8,4" />
+        <Button Content="Начать обычный аудит" Command="{Binding StartAuditCommand}" Margin="0,0,8,4" />
+        <Button Content="Найти целевые серверы" Command="{Binding FindTargetServersCommand}" Margin="0,0,8,4" />
         <Button Content="Остановить аудит" Command="{Binding StopAuditCommand}" Margin="0,0,8,4" />
         <Button Content="Отключиться" Command="{Binding DisconnectCommand}" Margin="0,0,8,4" />
       </WrapPanel>
@@ -32,6 +33,14 @@
       </Grid>
       <TextBox Text="{Binding CustomPorts}" IsVisible="{Binding IsCustomProfile}" IsEnabled="{Binding CanConfigure}" PlaceholderText="22,80,443,8000-8010" />
       <TextBlock Text="Полный профиль проверит 65535 портов каждого устройства и может занять длительное время." IsVisible="{Binding IsFullProfile}" TextWrapping="Wrap" />
+      <Expander Header="Целевой поиск SMB / FTP / Web" IsEnabled="{Binding CanConfigure}" HorizontalAlignment="Stretch">
+        <StackPanel Spacing="6">
+          <TextBlock Text="По умолчанию: 21, 80, 443, 445, 8000, 8080, 8443/TCP. Проверяются все обнаруженные узлы текущей сети." TextWrapping="Wrap" />
+          <TextBlock Text="Дополнительные TCP-порты:" />
+          <TextBox Text="{Binding AdditionalTargetPorts}" PlaceholderText="Необязательно: 2121,8081,8888,9443 или диапазон" />
+          <TextBlock Text="Дополнительные порты используются кнопкой «Найти целевые серверы». Совпадение требует подтверждения протокола; производитель и тип устройства не влияют на отбор." Classes="subtitle" TextWrapping="Wrap" />
+        </StackPanel>
+      </Expander>
       <Expander Header="Параметры TCP-проверки" IsEnabled="{Binding CanConfigure}" HorizontalAlignment="Stretch">
         <StackPanel Orientation="Horizontal" Spacing="10">
           <TextBlock Text="Параллельных задач:" VerticalAlignment="Center" />
@@ -42,9 +51,21 @@
       </Expander>
       <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding HasError}" TextWrapping="Wrap" Foreground="{DynamicResource ErrorBrush}" />
       <TextBlock Text="{Binding DeviceCount, StringFormat='Обнаружено устройств текущей сети: {0}. Шлюз добавляется автоматически; этот компьютер - по флажку.'}" TextWrapping="Wrap" Classes="subtitle" />
+      <StackPanel IsVisible="{Binding IsPreparingDiscovery}" Spacing="4">
+        <TextBlock Text="Обнаружение узлов перед целевым аудитом:" />
+        <ProgressBar Value="{Binding Devices.ProgressPercent}" Minimum="0" Maximum="100" Height="4" />
+        <TextBlock Text="{Binding Devices.ProgressText}" TextWrapping="Wrap" Classes="subtitle" />
+      </StackPanel>
       <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />
       <ProgressBar Value="{Binding ProgressPercent}" Minimum="0" Maximum="100" Height="4" />
       <TextBlock Text="{Binding ProgressText}" TextWrapping="Wrap" Classes="subtitle" />
+      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+        <TextBlock Text="Отображение:" VerticalAlignment="Center" />
+        <ComboBox Grid.Column="1" ItemsSource="{Binding DisplayModes}" SelectedIndex="{Binding SelectedDisplayModeIndex}" HorizontalAlignment="Stretch" />
+      </Grid>
+      <TextBlock Text="{Binding TargetStatusText}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding CheckedPortsText}" Classes="subtitle" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding ScopeNote}" Classes="subtitle" TextWrapping="Wrap" />
       <Grid ColumnDefinitions="*,160,130" ColumnSpacing="10">
         <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Поиск по IP, имени, службе или продукту" />
         <ComboBox Grid.Column="1" ItemsSource="{Binding ServiceFilters}" SelectedIndex="{Binding SelectedServiceIndex}" HorizontalAlignment="Stretch" />
@@ -52,6 +73,7 @@
       </Grid>
       <TextBlock Text="{Binding FilterError}" IsVisible="{Binding HasFilterError}" Foreground="{DynamicResource ErrorBrush}" />
       <Border Classes="card" Padding="0" Height="300">
+        <Grid>
         <TableView ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" CanUserResizeColumns="True" ScrollViewer.AllowAutoHide="False">
           <TableView.Columns>
             <TableViewColumn Header="IP" Binding="{ReflectionBinding Address}" Width="130" />
@@ -62,9 +84,27 @@
             <TableViewColumn Header="Продукт" Binding="{ReflectionBinding Product}" Width="150" />
             <TableViewColumn Header="Версия" Binding="{ReflectionBinding Version}" Width="100" />
             <TableViewColumn Header="Достоверность" Binding="{ReflectionBinding Confidence}" Width="120" />
+            <TableViewColumn Header="Проверено" Binding="{ReflectionBinding CheckedAtText}" Width="130" />
           </TableView.Columns>
         </TableView>
+        <TextBlock Text="{Binding EmptyResultsText}" IsVisible="{Binding IsResultsEmpty}" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16" />
+        </Grid>
       </Border>
+      <Expander Header="По узлам: подтверждения и состояние проверки" HorizontalAlignment="Stretch">
+        <Border Classes="card" Padding="0" Height="200">
+          <TableView ItemsSource="{Binding Hosts}" CanUserResizeColumns="True" ScrollViewer.AllowAutoHide="False">
+            <TableView.Columns>
+              <TableViewColumn Header="IP" Binding="{ReflectionBinding Address}" Width="130" />
+              <TableViewColumn Header="Имя" Binding="{ReflectionBinding Name}" Width="170" />
+              <TableViewColumn Header="Состояние проверки" Binding="{ReflectionBinding StateText}" Width="260" />
+              <TableViewColumn Header="Целевых служб" Binding="{ReflectionBinding EndpointCount}" Width="110" />
+              <TableViewColumn Header="Порт/служба" Binding="{ReflectionBinding Services}" Width="220" />
+              <TableViewColumn Header="Проверено портов" Binding="{ReflectionBinding CheckedPortsText}" Width="130" />
+              <TableViewColumn Header="Последняя проверка" Binding="{ReflectionBinding LastCheckedText}" Width="135" />
+            </TableView.Columns>
+          </TableView>
+        </Border>
+      </Expander>
       <TextBlock Text="{Binding ResultCount}" Classes="subtitle" />
       <Border Classes="card" Padding="10"><TextBlock Text="{Binding SelectionDetails}" TextWrapping="Wrap" /></Border>
       <TextBlock Text="Проверяются только найденные узлы текущей подсети. Результат означает «доступно с узла, выполняющего аудит». Открытый порт не доказывает наличие конкретной службы. Таймаут может означать фильтрацию, сон устройства или отсутствие ответа. Результаты хранятся до нового аудита, смены сети или закрытия программы." Classes="subtitle" FontSize="12" TextWrapping="Wrap" />

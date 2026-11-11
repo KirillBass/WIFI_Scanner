@@ -13,6 +13,7 @@ public static class PortScanProfiles
         PortProfile.Standard => Array.AsReadOnly(Enumerable.Range(1,1024).Concat(QuickPorts).Distinct().Order().ToArray()),
         PortProfile.Full => Array.AsReadOnly(Enumerable.Range(1,65535).ToArray()),
         PortProfile.Custom => Parse(custom),
+        PortProfile.Targeted => TargetServiceProfile.GetPorts(custom),
         _ => throw new ArgumentException("Неизвестный профиль портов.")
     };
     public static IReadOnlyList<int> Parse(string text)
@@ -30,6 +31,18 @@ public static class PortScanProfiles
         if (ports.Count == 0) throw new ArgumentException("Укажите порты, например: 22,80,443,8000-8010.");
         return Array.AsReadOnly(ports.ToArray());
     }
+    public static string Describe(IEnumerable<int> ports)
+    {
+        var sorted = ports.Distinct().Order().ToArray();
+        var ranges = new List<string>();
+        for (var i = 0; i < sorted.Length; i++)
+        {
+            var first = sorted[i];
+            while (i + 1 < sorted.Length && sorted[i + 1] == sorted[i] + 1) i++;
+            ranges.Add(first == sorted[i] ? first.ToString(CultureInfo.InvariantCulture) : $"{first}-{sorted[i]}");
+        }
+        return string.Join(", ", ranges);
+    }
     private static bool ReadPort(string text, out int port) =>
         int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out port) && port is >= 1 and <= 65535;
 }
@@ -39,11 +52,13 @@ public sealed class NetworkAuditOptions
     public int ServiceTimeoutMs { get; init; } = 1500;
     public int ServiceBudgetMs { get; init; } = 6000;
     public int BannerTimeoutMs { get; init; } = 150;
+    public TimeSpan TargetDiscoveryMaxAge { get; init; } = TimeSpan.FromMinutes(2);
     public const int MaximumResponseBytes = 65536;
     public void Validate(AuditRequest request)
     {
         if (request.Concurrency is < 1 or > 128) throw new ArgumentException("Параллелизм: от 1 до 128 подключений.");
         if (request.ConnectTimeoutMs is < 100 or > 10000) throw new ArgumentException("Таймаут TCP: от 100 до 10000 мс.");
+        if (TargetDiscoveryMaxAge <= TimeSpan.Zero) throw new ArgumentException("Некорректный срок актуальности обнаруженных узлов.");
         if (ServiceTimeoutMs is < 50 or > 10000 || ServiceBudgetMs < ServiceTimeoutMs || BannerTimeoutMs is < 10 or > 2000)
             throw new ArgumentException("Некорректные таймауты определения служб.");
     }
@@ -55,10 +70,13 @@ public static class AuditTargets
     {
         if (!session.IsReadyForAudit || session.Network is not { } network)
             throw new InvalidOperationException("Подключитесь к Wi-Fi и дождитесь получения IPv4.");
-        if (discovered.Network?.HasSameContext(network) != true || discovered.Devices.Count == 0)
+        if (discovered.Network?.HasSameContext(network) != true || discovered.Devices.Count == 0 ||
+            discovered.SessionId != Guid.Empty && discovered.SessionId != session.SessionId)
             throw new InvalidOperationException("Сначала обновите список устройств текущей сети.");
         var targets = new Dictionary<System.Net.IPAddress, AuditTarget>();
-        foreach (var device in discovered.Devices)
+        foreach (var device in discovered.Devices.GroupBy(d => d.IpAddress)
+            .Select(g => g.OrderByDescending(d => d.State == DeviceState.Online)
+                .ThenByDescending(d => d.LastSeen).ThenByDescending(d => d.FirstSeen).First()))
             if (network.Subnet.ContainsHost(device.IpAddress) && (includeLocal || !device.IpAddress.Equals(network.LocalIpv4)))
                 targets[device.IpAddress] = new(device.IpAddress, device.DisplayName,
                     device.IpAddress.Equals(network.LocalIpv4), Equals(device.IpAddress, network.Gateway));

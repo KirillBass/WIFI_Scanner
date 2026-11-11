@@ -36,7 +36,7 @@ public sealed partial class DeviceRowViewModel(NetworkDevice device, string? cur
     public string StateDescription => Device.State switch
     {
         DeviceState.Online => "В сети: есть ответ ICMP, свежие данные соседей или это локальный компьютер.",
-        DeviceState.Offline => "Недоступно: присутствие не подтверждено в нескольких завершённых циклах.",
+        DeviceState.Offline => "Недоступно: адрес проверен без подтверждения активности в нескольких циклах.",
         _ => "Неизвестно: в текущем цикле присутствие не подтверждено. Возможны сон или фильтрация."
     };
     public string FirstSeen => Device.FirstSeen.ToLocalTime().ToString("dd.MM HH:mm:ss", Russian);

@@ -10,7 +10,11 @@ public sealed class ServiceDetectionEngine(IPortScanner scanner, IEnumerable<ISe
     NetworkAuditOptions options, ILogger logger) : IServiceDetectionEngine
 {
     private readonly IServiceDetector[] _detectors = detectors.ToArray();
-    public async Task<ServiceIdentity> DetectAsync(LocalNetworkInfo network, PortScanConnection connection, CancellationToken cancellationToken)
+    public Task<ServiceIdentity> DetectAsync(LocalNetworkInfo network, PortScanConnection connection, CancellationToken cancellationToken) =>
+        DetectCoreAsync(network, connection, cancellationToken, false);
+    public Task<ServiceIdentity> DetectTargetedAsync(LocalNetworkInfo network, PortScanConnection connection, CancellationToken cancellationToken) =>
+        DetectCoreAsync(network, connection, cancellationToken, true);
+    private async Task<ServiceIdentity> DetectCoreAsync(LocalNetworkInfo network, PortScanConnection connection, CancellationToken cancellationToken, bool targeted)
     {
         if (connection.Stream is null || connection.Result.State != PortState.Open) return ServiceIdentity.Unknown;
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -32,7 +36,7 @@ public sealed class ServiceDetectionEngine(IPortScanner scanner, IEnumerable<ISe
         var probe = new ServiceProbe(connection.Result.Address, connection.Result.Port, banner, Open);
         try
         {
-            var applicable = _detectors.Where(d => d.IsPassive || d.Name is "HTTP" or "HTTPS" || d.IsPreferred(probe.Port))
+            var applicable = _detectors.Where(d => d.IsPassive || d.Name is "HTTP" or "HTTPS" || d.IsPreferred(probe.Port) || targeted && d.Name == "SMB")
                 .OrderBy(d => d.IsPassive ? 0 : d.IsPreferred(probe.Port) ? 1 : 2);
             foreach (var detector in applicable)
             {
@@ -42,6 +46,8 @@ public sealed class ServiceDetectionEngine(IPortScanner scanner, IEnumerable<ISe
                 try
                 {
                     var identity = await detector.DetectAsync(probe, deadline.Token).ConfigureAwait(false);
+                    if (targeted && detector is FtpServiceDetector && !TargetServiceMatcher.IsConfirmed(identity ?? ServiceIdentity.Unknown))
+                        identity = await FtpServiceDetector.ConfirmAmbiguousGreetingAsync(probe, deadline.Token).ConfigureAwait(false) ?? identity;
                     cancellationToken.ThrowIfCancellationRequested();
                     if (identity is not null) return identity;
                 }

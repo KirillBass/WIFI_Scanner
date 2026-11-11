@@ -29,7 +29,7 @@ public static class SubnetCalculator
         var mask = prefixLength == 0 ? 0u : uint.MaxValue << (32 - prefixLength);
         var network = ip & mask;
         var last = network | ~mask;
-        // /31 uses both endpoints (RFC 3021); /32 is a single host. The MVP sweep rejects both explicitly.
+        // /31 uses both endpoints (RFC 3021); /32 is a single host.
         var count = prefixLength >= 31 ? 1UL << (32 - prefixLength) : (1UL << (32 - prefixLength)) - 2;
         return new Ipv4Subnet(prefixLength, ToAddress(mask), ToAddress(network),
             prefixLength >= 31 ? null : ToAddress(last),
@@ -55,25 +55,35 @@ public sealed record Ipv4Subnet(int PrefixLength, IPAddress Mask, IPAddress Netw
         return value >= SubnetCalculator.ToUInt32(FirstHost) && value <= SubnetCalculator.ToUInt32(LastHost);
     }
 
-    public void EnsureSweepAllowed(int maximumHosts = 1024)
-    {
-        if (maximumHosts is < 1 or > 1024) throw new ArgumentOutOfRangeException(nameof(maximumHosts));
-        if (PrefixLength >= 31)
-            throw new NetworkDiscoveryException(NetworkDiscoveryError.UnsupportedSubnet, "Automatic discovery does not support /31 or /32.");
-        if (HostCount > (ulong)maximumHosts)
-            throw new NetworkDiscoveryException(NetworkDiscoveryError.SubnetTooLarge, $"Subnet has {HostCount} candidate hosts; maximum is {maximumHosts}.");
-    }
-
-    public IEnumerable<IPAddress> EnumerateHosts(int maximumHosts = 1024)
-    {
-        EnsureSweepAllowed(maximumHosts);
-        return Enumerate();
-    }
-
-    private IEnumerable<IPAddress> Enumerate()
+    // Intersect with usable unicast ranges before enumeration, including for /0.
+    // Memory and start-up time do not depend on the number of addresses in the subnet.
+    private IEnumerable<(uint First, uint Last)> UsableRanges()
     {
         var first = SubnetCalculator.ToUInt32(FirstHost);
-        for (ulong offset = 0; offset < HostCount; offset++)
-            yield return SubnetCalculator.ToAddress(checked(first + (uint)offset));
+        var last = SubnetCalculator.ToUInt32(LastHost);
+        foreach (var (start, end) in new (uint, uint)[]
+        {
+            (0x01000000, 0x7EFFFFFF), (0x80000000, 0xA9FDFFFF), (0xA9FF0000, 0xDFFFFFFF)
+        })
+        {
+            var low = Math.Max(first, start);
+            var high = Math.Min(last, end);
+            if (low <= high) yield return (low, high);
+        }
+    }
+
+    public ulong UsableHostCount => UsableRanges().Aggregate(0UL, (count, range) => count + range.Last - range.First + 1);
+
+    public void EnsureSweepAllowed()
+    {
+        if (UsableHostCount == 0)
+            throw new NetworkDiscoveryException(NetworkDiscoveryError.UnsupportedSubnet, "Subnet has no usable unicast addresses.");
+    }
+
+    public IEnumerable<IPAddress> EnumerateHosts()
+    {
+        foreach (var (first, last) in UsableRanges())
+            for (ulong address = first; address <= last; address++)
+                yield return SubnetCalculator.ToAddress((uint)address);
     }
 }

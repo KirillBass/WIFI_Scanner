@@ -27,6 +27,9 @@ public sealed partial class DevicesViewModel : ViewModelBase
     private readonly NetworkSessionViewModel? _session;
     private Guid _sessionId;
     private bool _sessionNetworkApplied;
+    private readonly object _dispatchGate = new();
+    private DeviceMonitorSnapshot? _pendingSnapshot;
+    private bool _updateQueued;
 
     public DevicesViewModel(ILocalNetworkService networks, IDeviceMonitorService monitor, DeviceDiscoveryOptions options, ILogger logger,
         NetworkSessionViewModel? session = null)
@@ -81,6 +84,7 @@ public sealed partial class DevicesViewModel : ViewModelBase
     public bool HasWarning => !string.IsNullOrWhiteSpace(WarningText);
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasWarning))] private string _warningText = string.Empty;
     [ObservableProperty] private string _lastScanText = "Discovery ещё не выполнялся";
+    [ObservableProperty] private bool _hasProgress;
     [ObservableProperty] private double _progressPercent;
     [ObservableProperty] private string _progressText = string.Empty;
 
@@ -123,8 +127,9 @@ public sealed partial class DevicesViewModel : ViewModelBase
         HasError = false; ErrorMessage = string.Empty; WarningText = string.Empty;
         StatusText = value is null ? "Активный локальный IPv4-интерфейс не найден." : "Нажмите «Сканировать», чтобы обнаружить устройства локальной сети.";
         LastScanText = "Discovery ещё не выполнялся";
+        HasProgress = false; ProgressText = string.Empty; ProgressPercent = 0;
         if (value is not null)
-            try { value.Subnet.EnsureSweepAllowed(_options.MaxAutoHostCount); _sweepAllowed = true; }
+            try { value.Subnet.EnsureSweepAllowed(); _sweepAllowed = true; }
             catch (NetworkDiscoveryException exception) { WarningText = GetMessage(exception); }
         NotifyCounts();
         ScanCommand.NotifyCanExecuteChanged(); StartMonitoringCommand.NotifyCanExecuteChanged();
@@ -190,21 +195,42 @@ public sealed partial class DevicesViewModel : ViewModelBase
         {
             if (_stopped) return;
             ApplySnapshot(_monitor.Current);
-            if (!HasError) StatusText = namesWerePending
+            if (!HasError && _snapshot.Progress?.Stage != DeviceDiscoveryStage.Cancelled) StatusText = namesWerePending
                 ? NamesStoppedMessage
                 : "Операция остановлена. Последние успешные результаты сохранены.";
         });
     }
 
-    private void OnUpdated(object? sender, DeviceMonitorSnapshot snapshot) =>
-        Dispatcher.UIThread.Post(() => { if (!_stopped) ApplySnapshot(snapshot); });
+    private void OnUpdated(object? sender, DeviceMonitorSnapshot snapshot)
+    {
+        lock (_dispatchGate)
+        {
+            if (_pendingSnapshot is null || snapshot.Version > _pendingSnapshot.Version) _pendingSnapshot = snapshot;
+            if (_updateQueued) return;
+            _updateQueued = true;
+        }
+        Dispatcher.UIThread.Post(() =>
+        {
+            DeviceMonitorSnapshot? latest;
+            lock (_dispatchGate) { latest = _pendingSnapshot; _pendingSnapshot = null; _updateQueued = false; }
+            if (!_stopped && latest is not null) ApplySnapshot(latest);
+        });
+    }
 
     private void ApplySnapshot(DeviceMonitorSnapshot snapshot)
     {
         if (snapshot.Version < _snapshot.Version) return;
         _snapshot = snapshot;
         if (SelectedNetwork is { } selected && snapshot.Network is { } network && selected.HasSameContext(network)) RenderSnapshot();
-        else { IsBusy = snapshot.IsDiscovering; IsMonitoring = snapshot.IsMonitoring; IsResolvingIdentities = snapshot.IsResolvingIdentities; }
+        else
+        {
+            IsBusy = snapshot.IsDiscovering; IsMonitoring = snapshot.IsMonitoring; IsResolvingIdentities = snapshot.IsResolvingIdentities;
+            if (snapshot.Network is null)
+            {
+                _rows.Clear(); Devices.Clear(); _shownDevices = null; HasProgress = false;
+                NotifyCounts();
+            }
+        }
     }
 
     private void RenderSnapshot()
@@ -216,25 +242,40 @@ public sealed partial class DevicesViewModel : ViewModelBase
         if (!ReferenceEquals(_shownDevices, _snapshot.Devices))
         {
             var target = new List<DeviceRowViewModel>();
+            var used = new HashSet<DeviceRowViewModel>();
+            var byIp = _rows.GroupBy(r => r.Device.IpAddress).ToDictionary(g => g.Key, g => g.First());
+            var byMac = _rows.Where(r => r.Device.MacAddress is not null).GroupBy(r => r.Device.MacAddress!)
+                .ToDictionary(g => g.Key, g => g.First());
             foreach (var device in _snapshot.Devices)
             {
-                var row = _rows.FirstOrDefault(r => !target.Contains(r) && device.MacAddress is not null && Equals(r.Device.MacAddress, device.MacAddress));
-                row ??= _rows.FirstOrDefault(r => !target.Contains(r) && r.Device.IpAddress.Equals(device.IpAddress) &&
-                    (device.MacAddress is null || r.Device.MacAddress is null || Equals(r.Device.MacAddress, device.MacAddress)));
-                if (row is null) row = new DeviceRowViewModel(device, SelectedNetwork?.Name); else row.Device = device;
+                byIp.TryGetValue(device.IpAddress, out var row);
+                if (row is not null && used.Contains(row)) row = null;
+                if (row is null && device.MacAddress is not null && byMac.TryGetValue(device.MacAddress, out var macRow) && !used.Contains(macRow)) row = macRow;
+                if (row is null) row = new DeviceRowViewModel(device, SelectedNetwork?.Name);
+                else if (row.Device != device) row.Device = device;
+                used.Add(row);
                 target.Add(row);
             }
             _rows.Clear(); _rows.AddRange(target); _shownDevices = _snapshot.Devices;
             ApplyFilter(); NotifyCounts();
         }
         LastScanText = _snapshot.LastCompletedAt is { } completed ? $"Последний discovery: {completed.ToLocalTime():dd.MM HH:mm:ss}" : "Discovery ещё не выполнялся";
+        HasProgress = _snapshot.Progress is not null;
         if (_snapshot.Progress is { } p)
         {
             ProgressPercent = p.Total == 0 ? 0 : p.Probed * 100d / p.Total;
-            var stage = p.Stage switch { DeviceDiscoveryStage.Probe => "Проверка адресов", DeviceDiscoveryStage.NeighborMerge => "Объединение соседей", DeviceDiscoveryStage.HostnameResolution => "Определение имён", _ => "Завершение" };
-            ProgressText = $"{stage}: {p.Probed} / {p.Total} · подтверждено: {p.Found}";
+            var stage = p.Stage switch
+            {
+                DeviceDiscoveryStage.Priority => "Приоритетные адреса", DeviceDiscoveryStage.Subnet => "Обход подсети",
+                DeviceDiscoveryStage.Probe => "Проверка адресов", DeviceDiscoveryStage.NeighborMerge => "Объединение соседей",
+                DeviceDiscoveryStage.HostnameResolution => "Определение имён", DeviceDiscoveryStage.Cancelled => "Остановлено, частичный результат",
+                DeviceDiscoveryStage.Error => "Ошибка, частичный результат", _ => "Сканирование завершено"
+            };
+            ProgressText = $"{stage}: {p.Probed:N0} / {p.Total:N0} ({ProgressPercent:F2}%) · найдено: {p.Found} · активных проверок: {p.Active} · время: {(int)p.Elapsed.TotalHours:00}:{p.Elapsed.Minutes:00}:{p.Elapsed.Seconds:00}";
         }
-        StatusText = HasError ? "Операция не выполнена. Последние успешные результаты сохранены." : IsBusy ? "Обнаружение устройств локальной сети…" :
+        StatusText = HasError ? "Операция не выполнена. Найденные результаты сохранены." :
+            _snapshot.Progress is { Stage: DeviceDiscoveryStage.Cancelled } partial ?
+                $"Сканирование остановлено. Проверено: {partial.Probed:N0} из {partial.Total:N0}. Найдено: {partial.Found}. Результаты сохранены; непроверенные адреса не считаются Offline." : IsBusy ? "Обнаружение устройств локальной сети…" :
             IsResolvingIdentities ? $"Найдено устройств: {KnownCount} · имена и производители определяются асинхронно…" :
             _namesStopped ? NamesStoppedMessage :
             IsMonitoring ? "● Мониторинг активен · следующий цикл после завершения интервала" :
@@ -279,8 +320,7 @@ public sealed partial class DevicesViewModel : ViewModelBase
         NetworkDiscoveryError.UnsupportedPlatform => "Обнаружение устройств доступно в Windows 10/11. Таблица соседей Windows на этой платформе недоступна.",
         NetworkDiscoveryError.NoInterface => "Активный локальный IPv4-интерфейс не найден.",
         NetworkDiscoveryError.ContextChanged => "Интерфейс или IPv4-сеть изменились. Мониторинг остановлен; обновите список интерфейсов и повторите сканирование.",
-        NetworkDiscoveryError.SubnetTooLarge => "Автоматический полный scan отключён: подсеть содержит слишком много адресов. Максимум - 1024 адреса.",
-        NetworkDiscoveryError.UnsupportedSubnet => "Автоматический обход /31 и /32 пока не поддерживается.",
+        NetworkDiscoveryError.UnsupportedSubnet => "Подсеть не содержит допустимых адресов IPv4 для обнаружения.",
         NetworkDiscoveryError.NeighborTableFailed => "Не удалось прочитать таблицу соседей Windows. Последние результаты сохранены.",
         NetworkDiscoveryError.ProbeFailed => "Не удалось выполнить ICMP-проверки. Проверьте подключение и разрешения Windows.",
         NetworkDiscoveryError.Busy => "Обнаружение уже выполняется. Дождитесь завершения или нажмите «Остановить».",

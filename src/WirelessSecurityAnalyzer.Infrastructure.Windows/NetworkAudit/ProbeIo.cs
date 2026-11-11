@@ -41,7 +41,7 @@ internal static partial class ProbeIo
         return new string(text.Select(c => c >= ' ' && c != '\u007f' ? c : ' ').ToArray()).Trim();
     }
     public static string BannerText(ReadOnlyMemory<byte> banner) => Encoding.ASCII.GetString(banner.Span);
-    [GeneratedRegex(@"\b(Microsoft-IIS|Apache|nginx)(?:/([0-9][0-9A-Za-z.\-_]*))?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?:^|\s)(Microsoft-IIS|Apache|nginx)(?=$|[\s/])(?:/([0-9][0-9A-Za-z.\-_]*))?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ProductPattern();
     public static (string? Product, string? Version) HttpProduct(string server)
     {

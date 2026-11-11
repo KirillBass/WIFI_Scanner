@@ -8,6 +8,7 @@ namespace WirelessSecurityAnalyzer.Infrastructure.Windows.NetworkAudit;
 
 public sealed class HttpServiceDetector : IServiceDetector
 {
+    private static readonly string UserAgent = $"WirelessSecurityAnalyzer/{typeof(HttpServiceDetector).Assembly.GetName().Version?.Major}";
     public string Name => "HTTP";
     public bool IsPassive => false;
     public bool IsPreferred(int port) => port is 80 or 8000 or 8008 or 8080 or 8081 or 5985;
@@ -15,12 +16,12 @@ public sealed class HttpServiceDetector : IServiceDetector
         await ReadAsync(await probe.OpenStreamAsync(cancellationToken).ConfigureAwait(false), probe, false, cancellationToken).ConfigureAwait(false);
     internal static async Task<ServiceIdentity?> ReadAsync(Stream stream, ServiceProbe probe, bool tls, CancellationToken token)
     {
-        var request = Encoding.ASCII.GetBytes($"HEAD / HTTP/1.1\r\nHost: {probe.Address}:{probe.Port}\r\nUser-Agent: WirelessSecurityAnalyzer/7\r\nConnection: close\r\n\r\n");
+        var request = Encoding.ASCII.GetBytes($"HEAD / HTTP/1.1\r\nHost: {probe.Address}:{probe.Port}\r\nUser-Agent: {UserAgent}\r\nConnection: close\r\n\r\n");
         await stream.WriteAsync(request, token).ConfigureAwait(false);
         var header = Encoding.ASCII.GetString(await ProbeIo.ReadHeaderAsync(stream, token).ConfigureAwait(false));
         var lines = header.Split("\r\n"); var status = lines[0].Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (status.Length < 2 || status[0] is not ("HTTP/1.0" or "HTTP/1.1") ||
-            !int.TryParse(status[1], out var code) || code is < 100 or > 599) return null;
+            status[1].Length != 3 || !status[1].All(char.IsAsciiDigit) || !int.TryParse(status[1], out var code) || code is < 100 or > 599) return null;
         var server = lines.Skip(1).FirstOrDefault(l => l.StartsWith("Server:", StringComparison.OrdinalIgnoreCase));
         var value = server is null ? "" : ProbeIo.Clean(server[7..], 256);
         var (product, version) = ProbeIo.HttpProduct(value);

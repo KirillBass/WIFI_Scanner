@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.NetworkInformation;
 using WirelessSecurityAnalyzer.Core.Models;
 
@@ -27,8 +28,10 @@ public sealed class DeviceStateTracker
             var mac = ValidMac(observation.MacAddress) ? observation.MacAddress : null;
             // MAC first; fall back to IP only when a known different MAC does not contradict identity.
             var tracked = mac is null ? null : _devices.FirstOrDefault(d => Equals(d.Device.MacAddress, mac) && !seen.Contains(d));
-            tracked ??= _devices.FirstOrDefault(d => !seen.Contains(d) && d.Device.IpAddress.Equals(observation.IpAddress) &&
-                (mac is null || d.Device.MacAddress is null || Equals(d.Device.MacAddress, mac)));
+            tracked ??= _devices.Where(d => !seen.Contains(d) && d.Device.IpAddress.Equals(observation.IpAddress) &&
+                    (mac is null || d.Device.MacAddress is null || Equals(d.Device.MacAddress, mac)))
+                .OrderByDescending(d => d.Device.State == DeviceState.Online)
+                .ThenByDescending(d => d.Device.LastSeen).ThenByDescending(d => d.Device.FirstSeen).FirstOrDefault();
             var firstSeen = tracked?.Device.FirstSeen ?? observation.ObservedAt;
             var lastSeen = tracked is null || observation.ObservedAt > tracked.Device.LastSeen ? observation.ObservedAt : tracked.Device.LastSeen;
             var identity = tracked?.Device.Identity;
@@ -59,6 +62,53 @@ public sealed class DeviceStateTracker
 
     public IReadOnlyList<NetworkDevice> Snapshot() => Array.AsReadOnly(_devices.Select(d => d.Device).OrderBy(d => SubnetCalculator.ToUInt32(d.IpAddress))
             .ThenBy(d => d.FirstSeen).ToArray());
+
+    /// <summary>Merge one confirmed address without aging any other address in an incomplete cycle.</summary>
+    public IReadOnlyList<NetworkDevice> Observe(LocalNetworkInfo network, NetworkDeviceObservation observation)
+    {
+        SetContext(network);
+        if (!observation.IsConfirmed || !network.Subnet.ContainsHost(observation.IpAddress)) return Snapshot();
+        var tracked = _devices.Where(d => d.Device.IpAddress.Equals(observation.IpAddress))
+            .OrderByDescending(d => d.Device.State == DeviceState.Online).ThenByDescending(d => d.Device.LastSeen).FirstOrDefault();
+        var mac = ValidMac(observation.MacAddress) ? observation.MacAddress : null;
+        if (tracked is not null && mac is not null && tracked.Device.MacAddress is not null && !Equals(mac, tracked.Device.MacAddress))
+        { _devices.Remove(tracked); tracked = null; }
+        // IP is the streaming key. Several current addresses can legitimately share one MAC.
+        var old = tracked?.Device;
+        var identity = old?.Identity;
+        if (observation.Hostname is not null)
+            identity = DeviceIdentityMerger.Merge(identity, new DeviceIdentity { Hostname = observation.Hostname,
+                HostnameSource = observation.IpAddress.Equals(network.LocalIpv4) ? DeviceNameSource.LocalComputer : DeviceNameSource.ReverseDns });
+        var device = new NetworkDevice(observation.IpAddress, mac ?? old?.MacAddress,
+            identity?.Hostname ?? observation.Hostname ?? old?.Hostname, observation.Latency, DeviceState.Online,
+            old?.FirstSeen ?? observation.ObservedAt, old is not null && old.LastSeen > observation.ObservedAt ? old.LastSeen : observation.ObservedAt,
+            Equals(observation.IpAddress, network.Gateway), observation.IpAddress.Equals(network.LocalIpv4), observation.Evidence)
+        { Identity = identity, IsIdentityResolving = old?.IsIdentityResolving ?? false };
+        if (tracked is null) { tracked = new(device); _devices.Add(tracked); }
+        else { tracked.Device = device; tracked.MissedScans = 0; }
+        // Streaming history has one current occupant per IP, including histories imported from a legacy cycle.
+        _devices.RemoveAll(d => !ReferenceEquals(d, tracked) && d.Device.IpAddress.Equals(device.IpAddress));
+        return Snapshot();
+    }
+
+    public IReadOnlyList<NetworkDevice> AddressChecked(IPAddress address, bool reliableAbsence, int offlineAfterMissedScans)
+    {
+        foreach (var tracked in _devices.Where(d => d.Device.IpAddress.Equals(address)))
+        {
+            if (reliableAbsence) tracked.MissedScans = Math.Min(offlineAfterMissedScans, tracked.MissedScans + 1);
+            tracked.Device = tracked.Device with { State = tracked.MissedScans >= offlineAfterMissedScans ? DeviceState.Offline : DeviceState.Unknown,
+                Latency = null, Evidence = DeviceEvidence.None };
+        }
+        return Snapshot();
+    }
+
+    public IReadOnlyList<NetworkDevice> SetResolving(NetworkDevice expected, bool resolving)
+    {
+        var tracked = _devices.FirstOrDefault(d => d.Device.IpAddress.Equals(expected.IpAddress) &&
+            d.Device.FirstSeen == expected.FirstSeen && Equals(d.Device.MacAddress, expected.MacAddress));
+        if (tracked is not null) tracked.Device = tracked.Device with { IsIdentityResolving = resolving && tracked.Device.State != DeviceState.Offline };
+        return Snapshot();
+    }
 
     public IReadOnlyList<NetworkDevice> SetResolving(bool resolving)
     {
