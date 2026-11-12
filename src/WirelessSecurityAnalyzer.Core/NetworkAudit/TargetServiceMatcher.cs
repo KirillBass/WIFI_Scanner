@@ -6,6 +6,8 @@ public enum TargetHostState { Pending, Scanning, Matched, NoConfirmedMatch, Part
 public sealed record TargetHostSummary(Guid SessionId, Guid AuditId, AuditTarget Target, TargetHostState State,
     IReadOnlyList<AuditRow> Endpoints, int CheckedPortCount, int TotalPortCount, DateTimeOffset? LastCheckedAt, bool IsPartial)
 {
+    public IReadOnlyList<int> TargetPorts { get; init; } = [];
+    public string PortsText => PortScanProfiles.Describe(TargetPorts);
     public bool HasMatch => Endpoints.Count > 0;
     public string Address => Target.Address.ToString();
     public string Name => Target.Name;

@@ -1,5 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels"
+             xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels" xmlns:audit="using:WirelessSecurityAnalyzer.Core.NetworkAudit"
              x:Class="WirelessSecurityAnalyzer.App.Views.NetworkAuditView" x:DataType="vm:NetworkAuditViewModel">
   <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
     <StackPanel Spacing="8">
@@ -35,10 +35,21 @@
       <TextBlock Text="Полный профиль проверит 65535 портов каждого устройства и может занять длительное время." IsVisible="{Binding IsFullProfile}" TextWrapping="Wrap" />
       <Expander Header="Целевой поиск SMB / FTP / Web" IsEnabled="{Binding CanConfigure}" HorizontalAlignment="Stretch">
         <StackPanel Spacing="6">
-          <TextBlock Text="По умолчанию: 21, 80, 443, 445, 8000, 8080, 8443/TCP. Проверяются все обнаруженные узлы текущей сети." TextWrapping="Wrap" />
+          <TextBlock Text="При быстром профиле: 21, 80, 443, 445, 8000, 8080, 8443/TCP. Для стандартного, полного и пользовательского профиля применяются выбранные выше порты. Проверяются все обнаруженные узлы текущей сети." TextWrapping="Wrap" />
           <TextBlock Text="Дополнительные TCP-порты:" />
           <TextBox Text="{Binding AdditionalTargetPorts}" PlaceholderText="Необязательно: 2121,8081,8888,9443 или диапазон" />
           <TextBlock Text="Дополнительные порты используются кнопкой «Найти целевые серверы». Совпадение требует подтверждения протокола; производитель и тип устройства не влияют на отбор." Classes="subtitle" TextWrapping="Wrap" />
+        </StackPanel>
+      </Expander>
+      <Expander Header="Поиск сайтов на всех портах одного устройства" HorizontalAlignment="Stretch">
+        <StackPanel Spacing="6">
+          <TextBlock Text="После первого аудита выберите устройство. Новый аудит проверит на нём TCP-порты 1-65535 и покажет подтверждённые SMB, FTP и веб-службы. Поиск может занять больше времени; его можно остановить." TextWrapping="Wrap" />
+          <ComboBox ItemsSource="{Binding FullScanTargets}" SelectedItem="{Binding SelectedFullScanTarget}" IsEnabled="{Binding CanConfigure}" HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="audit:AuditTarget"><TextBlock Text="{Binding DisplayText}" /></DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <Button Content="Проверить все TCP-порты этого устройства" Command="{Binding FindAllSitesOnDeviceCommand}" HorizontalAlignment="Left" />
         </StackPanel>
       </Expander>
       <Expander Header="Параметры TCP-проверки" IsEnabled="{Binding CanConfigure}" HorizontalAlignment="Stretch">
@@ -59,6 +70,7 @@
       <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />
       <ProgressBar Value="{Binding ProgressPercent}" Minimum="0" Maximum="100" Height="4" />
       <TextBlock Text="{Binding ProgressText}" TextWrapping="Wrap" Classes="subtitle" />
+      <TextBlock Text="{Binding WebProgressText}" TextWrapping="Wrap" Classes="subtitle" />
       <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
         <TextBlock Text="Отображение:" VerticalAlignment="Center" />
         <ComboBox Grid.Column="1" ItemsSource="{Binding DisplayModes}" SelectedIndex="{Binding SelectedDisplayModeIndex}" HorizontalAlignment="Stretch" />
@@ -85,6 +97,7 @@
             <TableViewColumn Header="Версия" Binding="{ReflectionBinding Version}" Width="100" />
             <TableViewColumn Header="Достоверность" Binding="{ReflectionBinding Confidence}" Width="120" />
             <TableViewColumn Header="Проверено" Binding="{ReflectionBinding CheckedAtText}" Width="130" />
+            <TableViewColumn Header="HTTP-сайт / страницы" Binding="{ReflectionBinding SiteSummary}" Width="350" />
           </TableView.Columns>
         </TableView>
         <TextBlock Text="{Binding EmptyResultsText}" IsVisible="{Binding IsResultsEmpty}" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16" />
@@ -100,6 +113,7 @@
               <TableViewColumn Header="Целевых служб" Binding="{ReflectionBinding EndpointCount}" Width="110" />
               <TableViewColumn Header="Порт/служба" Binding="{ReflectionBinding Services}" Width="220" />
               <TableViewColumn Header="Проверено портов" Binding="{ReflectionBinding CheckedPortsText}" Width="130" />
+              <TableViewColumn Header="Набор TCP-портов" Binding="{ReflectionBinding PortsText}" Width="220" />
               <TableViewColumn Header="Последняя проверка" Binding="{ReflectionBinding LastCheckedText}" Width="135" />
             </TableView.Columns>
           </TableView>
@@ -107,6 +121,30 @@
       </Expander>
       <TextBlock Text="{Binding ResultCount}" Classes="subtitle" />
       <Border Classes="card" Padding="10"><TextBlock Text="{Binding SelectionDetails}" TextWrapping="Wrap" /></Border>
+      <StackPanel Spacing="6" IsVisible="{Binding HasSites}">
+        <TextBlock Text="HTTP-сайты выбранной службы" FontWeight="SemiBold" />
+        <ComboBox ItemsSource="{Binding SelectedSites}" SelectedItem="{Binding SelectedSite}" HorizontalAlignment="Stretch">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="audit:HttpSiteResult">
+              <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <Button Content="Открыть сайт" Command="{Binding OpenSiteCommand}" HorizontalAlignment="Left" />
+        <TextBlock Text="{Binding SiteDetails}" TextWrapping="Wrap" />
+        <Expander Header="Показать страницы" HorizontalAlignment="Stretch">
+          <Border Classes="card" Padding="0" Height="220">
+            <TableView ItemsSource="{Binding SelectedPages}" CanUserResizeColumns="True" ScrollViewer.AllowAutoHide="False">
+              <TableView.Columns>
+                <TableViewColumn Header="URL" Binding="{ReflectionBinding Url}" Width="400" />
+                <TableViewColumn Header="HTTP" Binding="{ReflectionBinding StatusCode}" Width="65" />
+                <TableViewColumn Header="Заголовок" Binding="{ReflectionBinding Title}" Width="250" />
+                <TableViewColumn Header="Источник" Binding="{ReflectionBinding Source}" Width="180" />
+              </TableView.Columns>
+            </TableView>
+          </Border>
+        </Expander>
+      </StackPanel>
       <TextBlock Text="Проверяются только найденные узлы текущей подсети. Результат означает «доступно с узла, выполняющего аудит». Открытый порт не доказывает наличие конкретной службы. Таймаут может означать фильтрацию, сон устройства или отсутствие ответа. Результаты хранятся до нового аудита, смены сети или закрытия программы." Classes="subtitle" FontSize="12" TextWrapping="Wrap" />
     </StackPanel>
   </ScrollViewer>

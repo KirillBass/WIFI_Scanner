@@ -6,5 +6,6 @@
     <EmbeddedResource Include="Network/Identity/Data/oui.tsv" LogicalName="WirelessSecurityAnalyzer.Oui.tsv" />
     <ProjectReference Include="../WirelessSecurityAnalyzer.Core/WirelessSecurityAnalyzer.Core.csproj" />
     <PackageReference Include="Serilog" />
+    <PackageReference Include="AngleSharp" />
   </ItemGroup>
 </Project>

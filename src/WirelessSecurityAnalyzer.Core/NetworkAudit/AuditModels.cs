@@ -4,10 +4,15 @@ using WirelessSecurityAnalyzer.Core.Models;
 namespace WirelessSecurityAnalyzer.Core.NetworkAudit;
 
 public enum PortState { Open, Closed, Timeout, Unavailable, Error }
-public enum AuditStage { Idle, Preparing, Scanning, Detecting, Completed, Cancelled, NetworkChanged, Failed }
+public enum AuditStage { Idle, Preparing, Scanning, Detecting, Completed, Cancelled, NetworkChanged, Failed, FindingSites }
 public enum ServiceConfidence { Unknown, Low, Medium, High }
 public enum PortProfile { Quick, Standard, Full, Custom, Targeted }
-public sealed record AuditTarget(IPAddress Address, string Name, bool IsLocal, bool IsGateway);
+public sealed record AuditTarget(IPAddress Address, string Name, bool IsLocal, bool IsGateway)
+{
+    public IReadOnlyList<string> KnownHostnames { get; init; } = [];
+    public IReadOnlyList<int> ExtraPorts { get; init; } = [];
+    public string DisplayText => $"{Address} · {Name}";
+}
 public sealed record PortScanResult(IPAddress Address, int Port, PortState State, TimeSpan Elapsed, string? Error = null);
 public sealed record ServiceIdentity(string Protocol, string? Product, string? Version,
     ServiceConfidence Confidence, string Evidence, string Metadata = "")
@@ -18,6 +23,8 @@ public sealed record AuditRow(Guid SessionId, AuditTarget Target, int Port, Serv
     DateTimeOffset DetectedAt, PortProfile Profile)
 {
     public Guid AuditId { get; init; }
+    public IReadOnlyList<HttpSiteResult> HttpSites { get; init; } = [];
+    public string SiteSummary => HttpSites.Count > 0 ? string.Join("; ", HttpSites.Select(s => s.Summary)) : "Проверка не проводилась";
     public string Address => Target.Address.ToString();
     public string Name => Target.Name;
     public string Transport => "TCP";
@@ -36,12 +43,23 @@ public sealed record AuditSnapshot(long Version, Guid AuditId, Guid SessionId, A
     public IReadOnlyList<TargetHostSummary> Hosts { get; init; } = [];
     public IReadOnlyList<int> CheckedPorts { get; init; } = [];
     public PortProfile Profile { get; init; }
+    public bool TargetServicesOnly { get; init; }
     public string ScopeNote { get; init; } = "";
     public static AuditSnapshot Empty { get; } = new(0, Guid.Empty, Guid.Empty, AuditStage.Idle, false, [],
         new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, TimeSpan.Zero), "Аудит ещё не запускался.");
 }
 public sealed record AuditRequest(PortProfile Profile = PortProfile.Quick, string CustomPorts = "",
-    bool IncludeLocal = true, int Concurrency = 64, int ConnectTimeoutMs = 650);
+    bool IncludeLocal = true, int Concurrency = 64, int ConnectTimeoutMs = 650)
+{
+    public bool TargetServicesOnly { get; init; }
+    public string AdditionalPorts { get; init; } = "";
+    public IPAddress? TargetAddress { get; init; }
+}
+
+public interface ILocalTcpPortProvider
+{
+    IReadOnlyList<int> GetListeningPorts(LocalNetworkInfo network);
+}
 
 /// <summary>The stream is owned by this connection; detectors must not retain it.</summary>
 public sealed class PortScanConnection(PortScanResult result, Stream? stream = null) : IAsyncDisposable

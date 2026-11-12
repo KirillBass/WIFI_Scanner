@@ -275,9 +275,16 @@
       "wirelesssecurityanalyzer.infrastructure.windows": {
         "type": "Project",
         "dependencies": {
+          "AngleSharp": "[1.10.2, )",
           "Serilog": "[4.4.0, )",
-          "WirelessSecurityAnalyzer.Core": "[1.0.0, )"
+          "WirelessSecurityAnalyzer.Core": "[10.0.0, )"
         }
+      },
+      "AngleSharp": {
+        "type": "CentralTransitive",
+        "requested": "[1.10.2, )",
+        "resolved": "1.10.2",
+        "contentHash": "f/5wfCkGt6eDs2CEJSXZWKmuvOd58mSkN/fyZ88X9btackH2AhXxR6DrTRdak7pK5/pP0EZhHDE8EupnNJgawg=="
       }
     },
     "net10.0-windows7.0/win-x64": {

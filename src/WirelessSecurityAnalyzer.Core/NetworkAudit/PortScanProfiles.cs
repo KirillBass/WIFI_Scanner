@@ -16,6 +16,12 @@ public static class PortScanProfiles
         PortProfile.Targeted => TargetServiceProfile.GetPorts(custom),
         _ => throw new ArgumentException("Неизвестный профиль портов.")
     };
+    public static IReadOnlyList<int> GetPorts(AuditRequest request)
+    {
+        var ports = GetPorts(request.Profile, request.CustomPorts);
+        return string.IsNullOrWhiteSpace(request.AdditionalPorts) ? ports :
+            Array.AsReadOnly(ports.Concat(Parse(request.AdditionalPorts)).Distinct().Order().ToArray());
+    }
     public static IReadOnlyList<int> Parse(string text)
     {
         if (text.Length > 8192) throw new ArgumentException("Список портов слишком длинный.");
@@ -79,7 +85,9 @@ public static class AuditTargets
                 .ThenByDescending(d => d.LastSeen).ThenByDescending(d => d.FirstSeen).First()))
             if (network.Subnet.ContainsHost(device.IpAddress) && (includeLocal || !device.IpAddress.Equals(network.LocalIpv4)))
                 targets[device.IpAddress] = new(device.IpAddress, device.DisplayName,
-                    device.IpAddress.Equals(network.LocalIpv4), Equals(device.IpAddress, network.Gateway));
+                    device.IpAddress.Equals(network.LocalIpv4), Equals(device.IpAddress, network.Gateway))
+                { KnownHostnames = new[] { device.Identity?.Hostname, device.Hostname }.OfType<string>()
+                    .Where(n => Uri.CheckHostName(n.TrimEnd('.')) == UriHostNameType.Dns).Distinct(StringComparer.OrdinalIgnoreCase).Take(4).ToArray() };
         if (!discovered.Devices.Any(d => network.Subnet.ContainsHost(d.IpAddress)))
             throw new InvalidOperationException("Сначала обновите список устройств текущей сети.");
         if (includeLocal) targets.TryAdd(network.LocalIpv4, new(network.LocalIpv4, Environment.MachineName, true, Equals(network.LocalIpv4, network.Gateway)));

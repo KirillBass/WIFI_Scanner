@@ -68,6 +68,7 @@ public partial class App : Application
             services.AddSingleton<IDeviceMonitorService, DeviceMonitorService>();
             services.AddSingleton(new NetworkAuditOptions());
             services.AddSingleton<IPortScanner, TcpConnectPortScanner>();
+            services.AddSingleton<ILocalTcpPortProvider, LocalTcpPortProvider>();
             services.AddSingleton<IServiceDetector, SshServiceDetector>();
             services.AddSingleton<IServiceDetector, FtpServiceDetector>();
             services.AddSingleton<IServiceDetector, GenericBannerServiceDetector>();
@@ -76,6 +77,9 @@ public partial class App : Application
             services.AddSingleton<IServiceDetector, RdpServiceDetector>();
             services.AddSingleton<IServiceDetector, SmbServiceDetector>();
             services.AddSingleton<IServiceDetectionEngine, ServiceDetectionEngine>();
+            services.AddSingleton(new HttpSiteDiscoveryOptions());
+            services.AddSingleton<IHttpSiteHostResolver, HttpSiteHostResolver>();
+            services.AddSingleton<IHttpSiteDiscovery, HttpSiteDiscovery>();
             services.AddSingleton<INetworkAuditService, NetworkAuditService>();
             services.AddSingleton<ISystemSettingsService, WindowsSystemSettingsService>();
             services.AddSingleton<AccessPointsViewModel>();
