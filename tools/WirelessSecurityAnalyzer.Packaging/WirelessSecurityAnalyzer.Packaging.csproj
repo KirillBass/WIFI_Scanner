@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <UseAppHost>false</UseAppHost>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The same SDK library that creates the normal .NET apphost. No runtime plugin. -->
+    <Reference Include="Microsoft.NET.HostModel">
+      <HintPath>$(MSBuildSDKsPath)/../Microsoft.NET.HostModel.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

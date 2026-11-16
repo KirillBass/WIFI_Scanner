@@ -1,0 +1,30 @@
+<Project>
+  <!-- Ordinary build/debug output is untouched. Only this publish profile opts in. -->
+  <Target Name="WsaOrganizePublish" AfterTargets="Publish" Condition="'$(WsaOrganizePublish)' == 'true'">
+    <Error Condition="'$(SelfContained)' != 'true' or '$(UseAppHost)' != 'true' or '$(PublishSingleFile)' == 'true'"
+           Text="Organized publish requires SelfContained=true, UseAppHost=true, PublishSingleFile=false." />
+    <Error Condition="'$(RuntimeIdentifier)' != 'win-x64' and '$(RuntimeIdentifier)' != 'linux-x64'"
+           Text="Organized publish supports only win-x64 and linux-x64." />
+    <PropertyGroup>
+      <_WsaToolProject>$(MSBuildThisFileDirectory)../tools/WirelessSecurityAnalyzer.Packaging/WirelessSecurityAnalyzer.Packaging.csproj</_WsaToolProject>
+      <_WsaFileList>$(IntermediateOutputPath)organized-publish-files.txt</_WsaFileList>
+      <_WsaDotNet Condition="'$(DotNetHostPath)' != ''">$(DotNetHostPath)</_WsaDotNet>
+      <_WsaDotNet Condition="'$(_WsaDotNet)' == '' and '$(DOTNET_HOST_PATH)' != ''">$(DOTNET_HOST_PATH)</_WsaDotNet>
+      <_WsaDotNet Condition="'$(_WsaDotNet)' == ''">dotnet</_WsaDotNet>
+    </PropertyGroup>
+    <!-- Use the SDK's current inventory, never a wildcard over an earlier distribution. -->
+    <WriteLinesToFile File="$(_WsaFileList)" Lines="@(ResolvedFileToPublish->'%(RelativePath)')" Overwrite="true" Encoding="UTF-8" />
+    <MSBuild Projects="$(_WsaToolProject)" Targets="Restore;Build;GetTargetPath"
+             RemoveProperties="RuntimeIdentifier;RuntimeIdentifiers;SelfContained;PublishProfile;PublishDir;PublishUrl;ArtifactsPath;BaseOutputPath;OutputPath;BaseIntermediateOutputPath;IntermediateOutputPath;TargetFramework;CustomAfterMicrosoftCommonTargets;SourceRevisionId"
+             Properties="Configuration=Release;UseAppHost=false;WsaOrganizePublish=false;UseSharedCompilation=false">
+      <Output TaskParameter="TargetOutputs" ItemName="_WsaToolOutput" />
+    </MSBuild>
+    <ItemGroup>
+      <_WsaTool Include="@(_WsaToolOutput)" Condition="'%(Filename)%(Extension)' == 'WirelessSecurityAnalyzer.Packaging.dll'" />
+    </ItemGroup>
+    <RemoveDuplicates Inputs="@(_WsaTool)"><Output TaskParameter="Filtered" ItemName="_WsaToolPath" /></RemoveDuplicates>
+    <Exec Command="&quot;$(_WsaDotNet)&quot; &quot;@(_WsaToolPath)&quot; organize &quot;$(PublishDir)&quot; &quot;$(_WsaFileList)&quot; &quot;$(AssemblyName)&quot; &quot;$(RuntimeIdentifier)&quot; &quot;$(AppHostSourcePath)&quot; &quot;$(MSBuildThisFileDirectory)README.ru.md&quot;" />
+    <Exec Condition="'$(WsaCreateArchive)' == 'true'"
+          Command="&quot;$(_WsaDotNet)&quot; &quot;@(_WsaToolPath)&quot; archive &quot;$(PublishDir)&quot; &quot;$(PublishDir)../WirelessSecurityAnalyzer-$(RuntimeIdentifier).zip&quot;" />
+  </Target>
+</Project>

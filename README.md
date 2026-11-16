@@ -1,10 +1,10 @@
 # Wireless Security Analyzer
 
-Текущий релиз: [Version 10](https://github.com/KirillBass/WIFI_Scanner/releases/tag/v10.0.0). Добавлены автоматический поиск HTTP-сайтов и HTML-страниц, работа с несколькими сайтами на разных портах одного узла, проверка сайтов на этом ПК и полный поиск портов выбранного устройства. Исправлено применение пользовательского и полного профилей целевого поиска. Готовый Windows-архив и SHA-256 доступны на странице релиза.
+Текущий релиз: [Version 11](https://github.com/KirillBass/WIFI_Scanner/releases/tag/v11.0.0). Поставку упорядочили: основной EXE находится в корне, служебные библиотеки и среда .NET в `runtime/`, инструкция и карта зависимостей в `docs/`. Публикация автоматически создаёт ZIP и SHA-256. Поиск Wi-Fi, устройств, сетевой аудит и HTTP-сайты сохранены. Готовый Windows-архив доступен на странице релиза.
 
 Desktop-приложение на C# / .NET 10 / Avalonia 12.1.3 / ScottPlot.Avalonia 5.1.59 для анализа Wi-Fi среды и собственной локальной IP-сети. Основная платформа - Windows 10/11 x64. Интерфейс на русском языке; браузер и веб-сервер не используются.
 
-Интерфейс содержит семь вкладок сверху, включая «Сетевой аудит». Сводные показатели выводятся обычными строками, панели не имеют декоративных скруглений и больших отступов. Сканирование, мониторинг, фильтры, графики и подробности точек доступа и устройств работают через прежние сервисы. Сохранено оформление Light_Interface; текущая версия приложения: 10.
+Интерфейс содержит семь вкладок сверху, включая «Сетевой аудит». Сводные показатели выводятся обычными строками, панели не имеют декоративных скруглений и больших отступов. Сканирование, мониторинг, фильтры, графики и подробности точек доступа и устройств работают через прежние сервисы. Сохранено оформление Light_Interface; текущая версия приложения: 11.
 
 Version 5 добавляет Device Identity: устройства появляются в таблице до завершения определения имени и производителя, затем обновляются асинхронно. Технические сведения находятся в [отчёте Device Identity](docs/DEVICE_IDENTITY_REPORT.md).
 
@@ -72,11 +72,35 @@ dotnet run --project src/WirelessSecurityAnalyzer.App
 dotnet publish src/WirelessSecurityAnalyzer.App -c Release -p:PublishProfile=WindowsX64
 ```
 
-Результат: `publish/win-x64/WirelessSecurityAnalyzer.exe`. Включены .NET Runtime и зависимости Avalonia; single-file publishing и trimming выключены для надёжной загрузки XAML и native libraries.
+Результат: `publish/win-x64/WirelessSecurityAnalyzer.exe`, архив `publish/WirelessSecurityAnalyzer-win-x64.zip` и его `.sha256`. Включены .NET Runtime и зависимости Avalonia; установка .NET не требуется. Single-file, trimming, AOT и ReadyToRun выключены.
+
+```text
+publish/win-x64/
+  WirelessSecurityAnalyzer.exe
+  runtime/                         приложение и все зависимости
+    WirelessSecurityAnalyzer.dll
+    WirelessSecurityAnalyzer.deps.json
+    WirelessSecurityAnalyzer.runtimeconfig.json
+    Avalonia.*.dll, System.*.dll, ...
+    hostfxr.dll, coreclr.dll, libSkiaSharp.dll, ...
+  docs/
+    README.md
+    dependencies.json              происхождение, категории и SHA-256 файлов
+```
+
+Штатный apphost из .NET SDK запускает `runtime/WirelessSecurityAnalyzer.dll` относительно своего EXE. Внутри `runtime/` сохранено соседство managed/native библиотек, метаданных запуска и возможных каталогов локализации. Дополнительный launcher и собственный обработчик загрузки сборок не нужны. Ресурсы Avalonia, Inter и OUI остаются встроенными в DLL. PDB исключены из поставки; обычные build/Debug сохраняют символы.
+
+Автоматизацию задают [профиль WindowsX64](src/WirelessSecurityAnalyzer.App/Properties/PublishProfiles/WindowsX64.pubxml), [MSBuild target](packaging/OrganizedPublish.targets) и утилита [Packaging](tools/WirelessSecurityAnalyzer.Packaging/Program.cs), которая работает только при сборке. Состав берётся из актуального списка SDK и `.deps.json`; повторная публикация заменяет устаревшие файлы. Карту зависимостей и хеши можно проверить командой:
+
+```bash
+dotnet run --project tools/WirelessSecurityAnalyzer.Packaging -c Release -- verify publish/win-x64
+```
+
+Для стандартной плоской публикации в отдельный каталог добавьте `-p:WsaOrganizePublish=false -p:WsaCreateArchive=false`. Подробности запуска находятся в [инструкции поставки](packaging/README.ru.md).
 
 Рабочий порядок: после изменений кода обновлять локальную Windows-публикацию в `/etc/codex_work/WIFI_Scanner/publish`. Здесь хранить только текущую `win-x64/`, актуальный `WirelessSecurityAnalyzer-win-x64.zip` и его `.sha256`; прежние сборки и дубликаты удалять после успешного создания и проверки новой публикации. GitHub-релиз обновляется отдельным действием по запросу пользователя.
 
-Для запуска скачайте `WirelessSecurityAnalyzer-win-x64.zip` из релиза Version 10, полностью распакуйте и запустите `win-x64/WirelessSecurityAnalyzer.exe`. Для сборки из исходников используйте профиль публикации выше; локальный архив создаётся из папки `publish/win-x64/`. Артефакты сборки исключены из Git и распространяются отдельно от исходников.
+Для запуска скачайте `WirelessSecurityAnalyzer-win-x64.zip` из релиза Version 11, полностью распакуйте и запустите `win-x64/WirelessSecurityAnalyzer.exe`. Для сборки из исходников используйте профиль публикации выше; локальный архив создаётся автоматически из папки `publish/win-x64/`. Артефакты сборки исключены из Git и распространяются отдельно от исходников.
 
 ## Использование
 
