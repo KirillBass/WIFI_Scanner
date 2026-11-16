@@ -1,39 +1,37 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels" xmlns:models="using:WirelessSecurityAnalyzer.Core.Models"
              x:Class="WirelessSecurityAnalyzer.App.Views.DevicesView" x:DataType="vm:DevicesViewModel">
-  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-    <StackPanel Spacing="8">
-      <StackPanel Spacing="6">
-        <TextBlock Text="Устройства локальной сети" Classes="title" />
-        <TextBlock Text="Узлы выбранной IPv4-подсети · список не определяет клиентов конкретной точки доступа" Classes="subtitle" />
-      </StackPanel>
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-        <ComboBox ItemsSource="{Binding Networks}" SelectedItem="{Binding SelectedNetwork}" IsEnabled="{Binding CanConfigure}" HorizontalAlignment="Stretch" PlaceholderText="Локальный IPv4-интерфейс">
-          <ComboBox.ItemTemplate><DataTemplate x:DataType="models:LocalNetworkInfo"><TextBlock Text="{Binding DisplayName}" /></DataTemplate></ComboBox.ItemTemplate>
-        </ComboBox>
-        <Button Grid.Column="1" Content="Обновить интерфейсы" Command="{Binding RefreshInterfacesCommand}" />
-      </Grid>
-      <TextBlock Text="{Binding InterfaceText}" Classes="subtitle" />
-      <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="6">
-        <TextBlock Text="IPv4 компьютера:" />
-        <TextBlock Grid.Column="1" Text="{Binding LocalIpText}" />
-        <TextBlock Grid.Column="2" Text="Шлюз:" />
-        <TextBlock Grid.Column="3" Text="{Binding GatewayText}" />
-        <TextBlock Grid.Row="1" Text="Подсеть:" />
-        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SubnetText}" />
-        <TextBlock Grid.Row="1" Grid.Column="2" Text="Маска:" />
-        <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding MaskText}" />
-      </Grid>
-      <WrapPanel Orientation="Horizontal">
-        <Button Content="Сканировать" Command="{Binding ScanCommand}" Margin="0,0,10,6" />
-        <Button Content="Обновить имена" Command="{Binding RefreshNamesCommand}" Margin="0,0,10,6" />
-        <Button Content="Начать мониторинг" Command="{Binding StartMonitoringCommand}" Margin="0,0,10,6" />
-        <Button Content="Остановить" Command="{Binding StopMonitoringCommand}" Margin="0,0,18,6" />
-        <TextBlock Text="Интервал, сек:" VerticalAlignment="Center" Margin="0,0,10,6" />
-        <ComboBox ItemsSource="{Binding Intervals}" SelectedItem="{Binding SelectedInterval}" IsEnabled="{Binding CanConfigure}" Width="90" Margin="0,0,0,6" />
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="8">
+    <TextBlock Text="Устройства локальной сети" Classes="title" ToolTip.Tip="Узлы выбранной IPv4-подсети. Этот список не определяет клиентов конкретной точки доступа." />
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+      <ComboBox ItemsSource="{Binding Networks}" SelectedItem="{Binding SelectedNetwork}" IsEnabled="{Binding CanConfigure}" HorizontalAlignment="Stretch" PlaceholderText="Выберите IPv4-интерфейс">
+        <ComboBox.ItemTemplate><DataTemplate x:DataType="models:LocalNetworkInfo"><TextBlock Text="{Binding DisplayName}" /></DataTemplate></ComboBox.ItemTemplate>
+      </ComboBox>
+      <Button Grid.Column="1" Content="Обновить интерфейсы" Command="{Binding RefreshInterfacesCommand}" />
+    </Grid>
+    <StackPanel Grid.Row="2" Spacing="6">
+      <TextBlock Text="{Binding NetworkSummary}" Classes="subtitle" />
+      <WrapPanel>
+        <Button Content="Сканировать" Classes="primary" Command="{Binding ScanCommand}" Margin="0,0,10,4" />
+        <Button Content="Остановить" Command="{Binding StopMonitoringCommand}" Margin="0,0,10,4" />
+        <Button Content="Перейти к аудиту" Classes="link" Command="{ReflectionBinding $parent[Window].DataContext.NavigateCommand}" CommandParameter="Сетевой аудит" />
       </WrapPanel>
+      <Expander Header="Имена и мониторинг" HorizontalAlignment="Stretch">
+        <StackPanel Spacing="6" MaxHeight="130">
+          <WrapPanel>
+            <Button Content="Обновить имена" Command="{Binding RefreshNamesCommand}" Margin="0,0,10,4" />
+            <Button Content="Начать мониторинг" Command="{Binding StartMonitoringCommand}" Margin="0,0,10,4" />
+            <TextBlock Text="Интервал, сек:" VerticalAlignment="Center" Margin="0,0,8,4" />
+            <ComboBox ItemsSource="{Binding Intervals}" SelectedItem="{Binding SelectedInterval}" IsEnabled="{Binding CanConfigure}" Width="90" />
+          </WrapPanel>
+          <TextBlock Text="{Binding InterfaceText}" Classes="subtitle" />
+          <TextBlock Text="IP и MAC появляются сразу, имена и производители уточняются отдельно. «Остановить» отменяет и поиск имён." Classes="subtitle" />
+        </StackPanel>
+      </Expander>
+    </StackPanel>
+    <StackPanel Grid.Row="3" Spacing="6">
       <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />
-      <TextBlock Text="IP/MAC обнаруживаются отдельно от имени. Дождитесь определения имён; «Остановить» отменяет и эти запросы. Если имя не получено, используйте «Обновить имена»." Classes="subtitle" FontSize="12" />
+      <TextBlock Text="{Binding ReadinessText}" Classes="subtitle" />
       <Border Classes="card" IsVisible="{Binding HasError}" BorderBrush="{DynamicResource ErrorBrush}" Padding="12">
         <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" />
       </Border>
@@ -51,7 +49,8 @@
         <ComboBox Grid.Column="1" ItemsSource="{Binding StateFilters}" SelectedIndex="{Binding SelectedStateIndex}" HorizontalAlignment="Stretch" />
         <ComboBox Grid.Column="2" ItemsSource="{Binding SortOptions}" SelectedIndex="{Binding SelectedSortIndex}" HorizontalAlignment="Stretch" />
       </Grid>
-      <Border Classes="card" Padding="0" ClipToBounds="True" Height="320">
+    </StackPanel>
+      <Border Grid.Row="4" Classes="card" Padding="0" ClipToBounds="True" MinHeight="140">
         <Grid>
           <TableView ItemsSource="{Binding Devices}" CanUserResizeColumns="True" ScrollViewer.AllowAutoHide="False">
             <TableView.Columns>
@@ -85,14 +84,14 @@
           <TextBlock Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20" TextWrapping="Wrap" />
         </Grid>
       </Border>
+    <StackPanel Grid.Row="5" Spacing="4" ToolTip.Tip="Сон устройства, изоляция клиентов и фильтрация могут ограничивать обнаружение. Отсутствие ответа не доказывает выключение устройства. История хранится до закрытия приложения.">
       <WrapPanel Orientation="Horizontal">
         <TextBlock Text="{Binding LastScanText}" Classes="subtitle" Margin="0,0,24,0" />
-        <TextBlock Text="{Binding KnownCount, StringFormat='Известно: {0}'}" Classes="subtitle" Margin="0,0,18,0" />
-        <TextBlock Text="{Binding OnlineCount, StringFormat='Online: {0}'}" Classes="subtitle" Margin="0,0,18,0" />
-        <TextBlock Text="{Binding UnknownCount, StringFormat='Unknown: {0}'}" Classes="subtitle" Margin="0,0,18,0" />
-        <TextBlock Text="{Binding OfflineCount, StringFormat='Offline: {0}'}" Classes="subtitle" />
+        <TextBlock IsVisible="{Binding HasDeviceStatistics}" Text="{Binding KnownCount, StringFormat='Известно: {0}'}" Classes="subtitle" Margin="0,0,18,0" />
+        <TextBlock IsVisible="{Binding HasDeviceStatistics}" Text="{Binding OnlineCount, StringFormat='Online: {0}'}" Classes="subtitle" Margin="0,0,18,0" />
+        <TextBlock IsVisible="{Binding HasDeviceStatistics}" Text="{Binding UnknownCount, StringFormat='Unknown: {0}'}" Classes="subtitle" Margin="0,0,18,0" />
+        <TextBlock IsVisible="{Binding HasDeviceStatistics}" Text="{Binding OfflineCount, StringFormat='Offline: {0}'}" Classes="subtitle" />
       </WrapPanel>
-      <TextBlock Text="Некоторые устройства могут быть недоступны, если беспроводная сеть использует изоляцию клиентов или сетевые правила запрещают обмен между узлами. Сон устройства и фильтрация ICMP также ограничивают обнаружение. MAC может быть приватным. История хранится до закрытия приложения." Classes="subtitle" FontSize="12" TextWrapping="Wrap" />
     </StackPanel>
-  </ScrollViewer>
+  </Grid>
 </UserControl>

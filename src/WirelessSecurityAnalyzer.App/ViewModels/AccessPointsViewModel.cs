@@ -20,6 +20,7 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
     private readonly CancellationTokenSource _lifetime = new();
     private long _snapshotVersion;
     private bool _stopped;
+    private bool _lastAttemptFailed;
     private readonly IWifiConnectionService? _connections;
     public NetworkSessionViewModel? Session { get; }
     public event Action<WifiConnectionDialogViewModel>? ConnectionRequested;
@@ -47,6 +48,16 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
     public int Ghz6Count => _rows.Values.Count(r => r.AccessPoint.Band == WifiBand.Ghz6);
     public bool IsEmpty => AccessPoints.Count == 0;
     public bool HasSelectedAccessPoint => SelectedAccessPoint is not null;
+    public bool HasSnapshot => _snapshotVersion > 0;
+    public bool ShowScanStatus => HasScanAttempt || HasSnapshot;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowScanStatus))] private bool _hasScanAttempt;
+    public bool AreResultsPrevious => HasSnapshot && (IsBusy || _lastAttemptFailed);
+    public string ResultCaption => !HasSnapshot ? "Сканирование ещё не выполнялось" :
+        $"{(AreResultsPrevious ? "Предыдущий снимок" : "Последний снимок")}: {TotalCount} точек доступа (BSS)";
+    public string EmptyText => IsBusy ? "Сканирование эфира…" : !HasSnapshot ? "Нажмите «Сканировать», чтобы найти сети Wi-Fi." :
+        SearchText.Length > 0 || SelectedBandIndex != 0 ? "Нет сетей, соответствующих фильтрам." : "Сканирование завершено. Точки доступа не найдены.";
+    [ObservableProperty] private bool _hasAdapter;
+    [ObservableProperty] private bool _isInitialized;
 
     [ObservableProperty] private string _searchText = string.Empty;
     [ObservableProperty] private AccessPointRowViewModel? _selectedAccessPoint;
@@ -57,7 +68,8 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
     [ObservableProperty] private string _lastScanText = "Сканирование ещё не выполнялось";
 
     protected override string UnexpectedErrorMessage => "Не удалось выполнить операцию. Подробности сохранены в локальном журнале.";
-    protected override string FailureStatus => "Операция не выполнена. Последние результаты сохранены.";
+    protected override string FailureStatus => "Не удалось просканировать эфир.";
+    partial void OnIsBusyChanged(bool value) => NotifyScanPresentation();
 
     partial void OnSearchTextChanged(string value) => ApplyFilter();
     partial void OnSelectedAccessPointChanged(AccessPointRowViewModel? value)
@@ -95,22 +107,30 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
             {
                 AdapterText = adapters.Count == 0 ? "Wi-Fi адаптер не обнаружен" :
                     string.Join(" • ", adapters.Select(a => $"{a.Description} ({FormatAdapterState(a.State)})"));
-                if (adapters.Count == 0) ShowError(new WifiException(WifiErrorKind.NoAdapter, "No adapter."));
+                HasAdapter = adapters.Count > 0;
+                SetError(adapters.Count == 0 ? new WifiException(WifiErrorKind.NoAdapter, "No adapter.") : null);
             });
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
         catch (Exception exception)
         {
             Logger.Error(exception, "Adapter detection failed");
-            await Dispatcher.UIThread.InvokeAsync(() => { AdapterText = "Адаптер недоступен"; ShowError(exception); });
+            await Dispatcher.UIThread.InvokeAsync(() => { AdapterText = "Адаптер недоступен"; HasAdapter = false; SetError(exception); });
         }
+        finally { await Dispatcher.UIThread.InvokeAsync(() => IsInitialized = true); }
     }
+
+    [RelayCommand]
+    private Task RefreshAdaptersAsync() => InitializeAsync();
 
     [RelayCommand(IncludeCancelCommand = true)]
     private async Task ScanAsync(CancellationToken cancellationToken)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
         IsBusy = true;
+        HasScanAttempt = true;
+        _lastAttemptFailed = true;
+        NotifyScanPresentation();
         SetError(null);
         StatusText = "Сканирование эфира…";
         try
@@ -123,7 +143,7 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
         }
         catch (OperationCanceledException) when (linked.IsCancellationRequested)
         {
-            await Dispatcher.UIThread.InvokeAsync(() => StatusText = "Сканирование отменено. Последние результаты сохранены.");
+            await Dispatcher.UIThread.InvokeAsync(() => StatusText = HasSnapshot ? "Сканирование отменено. Показан предыдущий снимок." : "Сканирование отменено.");
         }
         catch (Exception exception)
         {
@@ -156,6 +176,7 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
     {
         if (snapshot.Version <= _snapshotVersion) return;
         _snapshotVersion = snapshot.Version;
+        _lastAttemptFailed = false;
         var seen = snapshot.AccessPoints.Select(ap => ap.Bssid).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var bssid in _rows.Keys.Where(key => !seen.Contains(key)).ToArray()) _rows.Remove(bssid);
         foreach (var ap in snapshot.AccessPoints)
@@ -171,6 +192,7 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
         SetError(null);
         LastScanText = $"Последнее сканирование: {snapshot.CompletedAt.ToLocalTime():HH:mm:ss}";
         StatusText = TotalCount == 0 ? "Сканирование завершено. Точки доступа не обнаружены." : $"Обнаружено BSS: {TotalCount}";
+        NotifyScanPresentation();
     }
 
     private void ApplyFilter()
@@ -184,6 +206,12 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
         if (SelectedAccessPoint is not null && !target.Contains(SelectedAccessPoint)) SelectedAccessPoint = null;
         SynchronizeRows(AccessPoints, target);
         OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(EmptyText));
+    }
+
+    private void NotifyScanPresentation()
+    {
+        foreach (var name in new[] { nameof(HasSnapshot), nameof(ShowScanStatus), nameof(AreResultsPrevious), nameof(ResultCaption), nameof(EmptyText) }) OnPropertyChanged(name);
     }
 
     private static string FormatAdapterState(WifiAdapterState state) => state switch

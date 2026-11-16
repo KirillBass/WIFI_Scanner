@@ -150,6 +150,8 @@ public sealed class WindowsWifiConnectionService(IWifiConnectionBackend backend,
         try
         {
             var current = sessions.Current;
+            if (current.IsInterfaceSelection && current.Network?.IsWireless != true)
+                return Result(WifiConnectionFailure.NetworkUnavailable);
             if (current.InterfaceId is not { } id) { sessions.Clear(); return Result(WifiConnectionFailure.None); }
             sessions.SetState(current.SessionId, WifiConnectionState.Disconnecting);
             await StopSessionOperationsAsync().ConfigureAwait(false);
@@ -188,21 +190,38 @@ public sealed class WindowsWifiConnectionService(IWifiConnectionBackend backend,
     private async Task RefreshAsync(CancellationToken token)
     {
         var previous = sessions.Current;
+        if (previous.IsInterfaceSelection && previous.Network is { } selected)
+        {
+            if (!await networks.IsCurrentAsync(selected, token).ConfigureAwait(false))
+            {
+                if (sessions.Current.SessionId != previous.SessionId) return;
+                await StopSessionOperationsAsync(includeSignal: selected.IsWireless).ConfigureAwait(false);
+                sessions.Clear(previous.SessionId);
+            }
+            else if (selected.IsWireless)
+            {
+                var associated = await backend.GetCurrentAsync(previous.InterfaceId, token).ConfigureAwait(false);
+                if (associated is not null && associated.InterfaceId == previous.InterfaceId)
+                    sessions.SetConnection(associated, selected, previous.SessionId);
+            }
+            return;
+        }
         var connection = await backend.GetCurrentAsync(previous.InterfaceId, token).ConfigureAwait(false);
         var network = connection is null ? null : await FindNetworkAsync(connection.InterfaceId, token).ConfigureAwait(false);
+        if (sessions.Current.SessionId != previous.SessionId) return;
         var changed = connection is null ? previous.SessionId != Guid.Empty : previous.InterfaceId != connection.InterfaceId ||
             previous.Ssid != connection.Ssid || previous.Network is { } old && (network is null || !old.HasSameContext(network));
         if (changed) await StopSessionOperationsAsync().ConfigureAwait(false);
-        if (connection is null) sessions.Clear();
-        else sessions.SetConnection(connection, network);
+        if (connection is null) sessions.Clear(previous.SessionId);
+        else sessions.SetConnection(connection, network, previous.SessionId);
         if (previous.SessionId != sessions.Current.SessionId)
             logger.Information("Network session changed: {PreviousSession} -> {Session}", previous.SessionId, sessions.Current.SessionId);
     }
     private async Task<LocalNetworkInfo?> FindNetworkAsync(Guid id, CancellationToken token) =>
         (await networks.GetNetworksAsync(token).ConfigureAwait(false)).FirstOrDefault(n => Guid.TryParse(n.InterfaceId, out var found) && found == id);
-    private async Task StopSessionOperationsAsync()
+    private async Task StopSessionOperationsAsync(bool includeSignal = true)
     {
-        if (signal is not null) await signal.StopAsync().ConfigureAwait(false);
+        if (includeSignal && signal is not null) await signal.StopAsync().ConfigureAwait(false);
         if (devices is not null) await devices.ResetAsync().ConfigureAwait(false);
         identityCache?.ResetSession();
     }

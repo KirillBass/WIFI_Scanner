@@ -7,6 +7,7 @@ using Serilog;
 using WirelessSecurityAnalyzer.Core.Interfaces;
 using WirelessSecurityAnalyzer.Core.Models;
 using WirelessSecurityAnalyzer.Core.Network;
+using WirelessSecurityAnalyzer.Core.NetworkAudit;
 
 namespace WirelessSecurityAnalyzer.App.ViewModels;
 
@@ -25,6 +26,7 @@ public sealed partial class DevicesViewModel : ViewModelBase
     private bool _namesStopped;
     private const string NamesStoppedMessage = "Поиск имён остановлен. Найденные устройства сохранены. Для повторной попытки нажмите «Обновить имена».";
     private readonly NetworkSessionViewModel? _session;
+    private readonly INetworkAuditService? _audit;
     private Guid _sessionId;
     private bool _sessionNetworkApplied;
     private readonly object _dispatchGate = new();
@@ -32,12 +34,14 @@ public sealed partial class DevicesViewModel : ViewModelBase
     private bool _updateQueued;
 
     public DevicesViewModel(ILocalNetworkService networks, IDeviceMonitorService monitor, DeviceDiscoveryOptions options, ILogger logger,
-        NetworkSessionViewModel? session = null)
+        NetworkSessionViewModel? session = null, INetworkAuditService? audit = null)
     {
         _networks = networks; _monitor = monitor; _options = options; _logger = logger;
         _snapshot = monitor.Current;
         _monitor.Updated += OnUpdated;
         _session = session;
+        _audit = audit;
+        if (_audit is not null) _audit.Updated += OnAuditUpdated;
         if (_session is not null) { _session.PropertyChanged += OnSessionChanged; ApplySession(); }
     }
 
@@ -51,13 +55,22 @@ public sealed partial class DevicesViewModel : ViewModelBase
     public int UnknownCount => _rows.Count(r => r.Device.State == DeviceState.Unknown);
     public int OfflineCount => _rows.Count(r => r.Device.State == DeviceState.Offline);
     public bool IsEmpty => Devices.Count == 0;
-    public string EmptyText => KnownCount > 0 ? "Нет устройств, соответствующих фильтрам." : "Устройства пока не обнаружены.";
+    public bool HasDiscoveryResults => _snapshot.LastCompletedAt is not null && SelectedNetwork is { } n && _snapshot.Network?.HasSameContext(n) == true && MatchesSession(_snapshot);
+    public bool HasDeviceStatistics => KnownCount > 0 || HasDiscoveryResults;
+    public string EmptyText => KnownCount > 0 ? "Нет устройств, соответствующих фильтрам." :
+        IsBusy ? "Поиск устройств…" : HasDiscoveryResults ? "Поиск завершён. Устройства не найдены." : "Выберите интерфейс и нажмите «Сканировать».";
+    public string NetworkSummary => SelectedNetwork is null ? "Выберите активный интерфейс Ethernet или Wi-Fi." :
+        $"IPv4: {LocalIpText} · подсеть: {SubnetText} · шлюз: {GatewayText}";
+    public string ReadinessText => _audit?.Current.IsRunning == true ? "Выполняется аудит. Остановите его перед новым поиском устройств." :
+        _session is { IsConnecting: true } or { IsObtainingAddress: true } ? "Дождитесь завершения подключения Wi-Fi или отмените подключение." :
+        IsLoading ? "Определяем сетевые интерфейсы…" : SelectedNetwork is null ? "Подключите сетевой интерфейс и обновите список." :
+        IsMonitoring ? "Мониторинг активен. Для перехода к аудиту остановите мониторинг." : "";
     public string InterfaceText => SelectedNetwork?.InterfaceDescription ?? "Активный локальный IPv4-интерфейс не найден";
     public string LocalIpText => SelectedNetwork?.LocalIpv4.ToString() ?? "-";
     public string SubnetText => SelectedNetwork is { } n ? $"{n.NetworkAddress}/{n.PrefixLength}" : "-";
     public string GatewayText => SelectedNetwork?.Gateway?.ToString() ?? "-";
     public string MaskText => SelectedNetwork?.SubnetMask.ToString() ?? "-";
-    public bool CanConfigure => !_stopped && !IsLoading && !IsBusy && !IsMonitoring &&
+    public bool CanConfigure => !_stopped && _audit?.Current.IsRunning != true && !IsLoading && !IsBusy && !IsMonitoring &&
         !(_session?.Current.State is WifiConnectionState.Connecting or WifiConnectionState.Authenticating or
             WifiConnectionState.Connected or WifiConnectionState.ObtainingAddress or WifiConnectionState.Disconnecting);
     public bool CanDiscover => CanConfigure && SelectedNetwork is not null && _sweepAllowed;
@@ -83,10 +96,12 @@ public sealed partial class DevicesViewModel : ViewModelBase
     [ObservableProperty] private bool _hasError;
     public bool HasWarning => !string.IsNullOrWhiteSpace(WarningText);
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasWarning))] private string _warningText = string.Empty;
-    [ObservableProperty] private string _lastScanText = "Discovery ещё не выполнялся";
+    [ObservableProperty] private string _lastScanText = "Поиск ещё не выполнялся";
     [ObservableProperty] private bool _hasProgress;
     [ObservableProperty] private double _progressPercent;
     [ObservableProperty] private string _progressText = string.Empty;
+    partial void OnIsLoadingChanged(bool value) => OnPropertyChanged(nameof(ReadinessText));
+    partial void OnIsMonitoringChanged(bool value) => OnPropertyChanged(nameof(ReadinessText));
 
     public Task InitializeAsync() => RefreshInterfacesCommand.ExecuteAsync(null);
 
@@ -98,6 +113,13 @@ public sealed partial class DevicesViewModel : ViewModelBase
     }
     private void OnSessionChanged(object? sender, PropertyChangedEventArgs e)
     { if (e.PropertyName == nameof(NetworkSessionViewModel.Current)) ApplySession(); }
+    private void OnAuditUpdated(object? sender, AuditSnapshot snapshot) => Dispatcher.UIThread.Post(() =>
+    {
+        if (_stopped) return;
+        OnPropertyChanged(nameof(CanConfigure)); OnPropertyChanged(nameof(ReadinessText));
+        ScanCommand.NotifyCanExecuteChanged(); StartMonitoringCommand.NotifyCanExecuteChanged();
+        RefreshInterfacesCommand.NotifyCanExecuteChanged(); RefreshNamesCommand.NotifyCanExecuteChanged();
+    });
     private void ApplySession()
     {
         if (_session is null || _stopped) return;
@@ -111,6 +133,7 @@ public sealed partial class DevicesViewModel : ViewModelBase
         if (!_sessionNetworkApplied && session.IsReadyForAudit && session.Network is { } network)
         { UseSessionNetwork(network); _sessionNetworkApplied = true; }
         OnPropertyChanged(nameof(CanConfigure));
+        OnPropertyChanged(nameof(ReadinessText));
         ScanCommand.NotifyCanExecuteChanged(); StartMonitoringCommand.NotifyCanExecuteChanged();
         RefreshInterfacesCommand.NotifyCanExecuteChanged(); StopMonitoringCommand.NotifyCanExecuteChanged(); RefreshNamesCommand.NotifyCanExecuteChanged();
     }
@@ -126,14 +149,16 @@ public sealed partial class DevicesViewModel : ViewModelBase
         _sweepAllowed = false;
         HasError = false; ErrorMessage = string.Empty; WarningText = string.Empty;
         StatusText = value is null ? "Активный локальный IPv4-интерфейс не найден." : "Нажмите «Сканировать», чтобы обнаружить устройства локальной сети.";
-        LastScanText = "Discovery ещё не выполнялся";
+        LastScanText = "Поиск ещё не выполнялся";
         HasProgress = false; ProgressText = string.Empty; ProgressPercent = 0;
         if (value is not null)
             try { value.Subnet.EnsureSweepAllowed(); _sweepAllowed = true; }
             catch (NetworkDiscoveryException exception) { WarningText = GetMessage(exception); }
+        if (value is not null && _sweepAllowed) _session?.SelectNetwork(value);
+        OnPropertyChanged(nameof(NetworkSummary)); OnPropertyChanged(nameof(ReadinessText));
         NotifyCounts();
         ScanCommand.NotifyCanExecuteChanged(); StartMonitoringCommand.NotifyCanExecuteChanged();
-        if (_snapshot.Network is { } network && value is not null && network.HasSameContext(value)) RenderSnapshot();
+        if (_snapshot.Network is { } network && value is not null && network.HasSameContext(value) && MatchesSession(_snapshot)) RenderSnapshot();
     }
 
     [RelayCommand(CanExecute = nameof(CanConfigure))]
@@ -158,7 +183,7 @@ public sealed partial class DevicesViewModel : ViewModelBase
         catch (Exception exception)
         {
             _logger.Warning(exception, "Local network detection failed");
-            await Dispatcher.UIThread.InvokeAsync(() => { if (!_stopped) ShowError(exception); });
+            await Dispatcher.UIThread.InvokeAsync(() => { if (!_stopped) ShowError(exception, "Не удалось получить список сетевых интерфейсов."); });
         }
         finally { await Dispatcher.UIThread.InvokeAsync(() => IsLoading = false); }
     }
@@ -219,9 +244,9 @@ public sealed partial class DevicesViewModel : ViewModelBase
 
     private void ApplySnapshot(DeviceMonitorSnapshot snapshot)
     {
-        if (snapshot.Version < _snapshot.Version) return;
+        if (snapshot.Version < _snapshot.Version || !MatchesSession(snapshot)) return;
         _snapshot = snapshot;
-        if (SelectedNetwork is { } selected && snapshot.Network is { } network && selected.HasSameContext(network)) RenderSnapshot();
+        if (SelectedNetwork is { } selected && snapshot.Network is { } network && selected.HasSameContext(network) && MatchesSession(snapshot)) RenderSnapshot();
         else
         {
             IsBusy = snapshot.IsDiscovering; IsMonitoring = snapshot.IsMonitoring; IsResolvingIdentities = snapshot.IsResolvingIdentities;
@@ -259,7 +284,7 @@ public sealed partial class DevicesViewModel : ViewModelBase
             _rows.Clear(); _rows.AddRange(target); _shownDevices = _snapshot.Devices;
             ApplyFilter(); NotifyCounts();
         }
-        LastScanText = _snapshot.LastCompletedAt is { } completed ? $"Последний discovery: {completed.ToLocalTime():dd.MM HH:mm:ss}" : "Discovery ещё не выполнялся";
+        LastScanText = _snapshot.LastCompletedAt is { } completed ? $"Последний поиск: {completed.ToLocalTime():dd.MM HH:mm:ss}" : "Поиск ещё не выполнялся";
         HasProgress = _snapshot.Progress is not null;
         if (_snapshot.Progress is { } p)
         {
@@ -273,14 +298,14 @@ public sealed partial class DevicesViewModel : ViewModelBase
             };
             ProgressText = $"{stage}: {p.Probed:N0} / {p.Total:N0} ({ProgressPercent:F2}%) · найдено: {p.Found} · активных проверок: {p.Active} · время: {(int)p.Elapsed.TotalHours:00}:{p.Elapsed.Minutes:00}:{p.Elapsed.Seconds:00}";
         }
-        StatusText = HasError ? "Операция не выполнена. Найденные результаты сохранены." :
+        StatusText = HasError ? KnownCount > 0 ? "Поиск завершился с ошибкой. Найденные устройства сохранены." : "Поиск завершился с ошибкой." :
             _snapshot.Progress is { Stage: DeviceDiscoveryStage.Cancelled } partial ?
                 $"Сканирование остановлено. Проверено: {partial.Probed:N0} из {partial.Total:N0}. Найдено: {partial.Found}. Результаты сохранены; непроверенные адреса не считаются Offline." : IsBusy ? "Обнаружение устройств локальной сети…" :
             IsResolvingIdentities ? $"Найдено устройств: {KnownCount} · имена и производители определяются асинхронно…" :
             _namesStopped ? NamesStoppedMessage :
             IsMonitoring ? "● Мониторинг активен · следующий цикл после завершения интервала" :
             _snapshot.LastCompletedAt is null ? "Нажмите «Сканировать», чтобы обнаружить устройства локальной сети." :
-            _rows.All(r => r.Device.IsLocalMachine) ? "Другие активные устройства не обнаружены. Возможны Client Isolation, guest network или фильтрация ICMP." : $"Известно устройств: {KnownCount} · Online: {OnlineCount}";
+            _rows.All(r => r.Device.IsLocalMachine) ? "Другие активные устройства не обнаружены. Возможны изоляция клиентов или фильтрация ответов." : "Поиск устройств завершён.";
     }
 
     private void ApplyFilter()
@@ -303,16 +328,17 @@ public sealed partial class DevicesViewModel : ViewModelBase
 
     private void NotifyCounts()
     {
-        foreach (var name in new[] { nameof(KnownCount), nameof(OnlineCount), nameof(UnknownCount), nameof(OfflineCount), nameof(IsEmpty), nameof(EmptyText) }) OnPropertyChanged(name);
+        foreach (var name in new[] { nameof(KnownCount), nameof(OnlineCount), nameof(UnknownCount), nameof(OfflineCount), nameof(IsEmpty), nameof(EmptyText), nameof(HasDiscoveryResults), nameof(HasDeviceStatistics), nameof(NetworkSummary), nameof(ReadinessText) }) OnPropertyChanged(name);
         RefreshNamesCommand.NotifyCanExecuteChanged();
     }
+    private bool MatchesSession(DeviceMonitorSnapshot snapshot) => _session is null || snapshot.SessionId == Guid.Empty || snapshot.SessionId == _session.Current.SessionId;
 
-    private void ShowError(Exception exception)
+    private void ShowError(Exception exception, string message = "Поиск устройств завершился с ошибкой.")
     {
         _logger.Warning(exception, "Local network UI operation failed");
         HasError = true;
         ErrorMessage = exception is NetworkDiscoveryException network ? GetMessage(network) : "Не удалось обнаружить устройства. Подробности сохранены в локальном журнале.";
-        StatusText = "Операция не выполнена. Последние успешные результаты сохранены.";
+        StatusText = message + (KnownCount > 0 ? " Найденные устройства сохранены." : "");
     }
 
     private static string GetMessage(NetworkDiscoveryException exception) => exception.Kind switch
@@ -332,6 +358,7 @@ public sealed partial class DevicesViewModel : ViewModelBase
         if (_stopped) return;
         _stopped = true; _monitor.Updated -= OnUpdated; _lifetime.Cancel();
         if (_session is not null) _session.PropertyChanged -= OnSessionChanged;
+        if (_audit is not null) _audit.Updated -= OnAuditUpdated;
     }
 
     public async Task StopAsync()

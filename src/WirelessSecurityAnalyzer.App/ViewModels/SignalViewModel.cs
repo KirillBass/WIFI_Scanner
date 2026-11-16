@@ -42,7 +42,7 @@ public sealed partial class SignalViewModel : WifiViewModelBase
     [ObservableProperty] private bool _isStopping;
 
     protected override string UnexpectedErrorMessage => "Не удалось выполнить операцию. Подробности сохранены в журнале.";
-    protected override string FailureStatus => "Операция не выполнена. История сохранена.";
+    protected override string FailureStatus => HasSamples ? "Мониторинг прерван. История сохранена." : "Не удалось начать мониторинг сигнала.";
 
     public AccessPointRowViewModel? SelectedAccessPoint
     {
@@ -57,6 +57,7 @@ public sealed partial class SignalViewModel : WifiViewModelBase
     }
 
     public bool CanChangeSelection => !IsMonitoring && !IsStopping && !StartMonitoringCommand.IsRunning;
+    public bool HasAccessPoints => AccessPoints.Count > 0;
     public string SelectedSsid => SelectedAccessPoint?.Ssid ?? "-";
     public string SelectedBssid => SelectedAccessPoint?.Bssid ?? "-";
     public string SelectedChannel => SelectedAccessPoint?.Channel ?? "-";
@@ -178,7 +179,7 @@ public sealed partial class SignalViewModel : WifiViewModelBase
             : HasError ? IsMonitoring ? "Ошибка сканирования. Мониторинг продолжится со следующей попытки." : "Мониторинг остановлен из-за ошибки."
             : _snapshot?.IsPresentInLastScan == false ? "Точка доступа не обнаружена в последнем сканировании. История сохранена."
             : IsMonitoring ? "Мониторинг активен" : "Мониторинг остановлен. Можно начать или продолжить измерения.";
-        foreach (var name in new[] { nameof(SelectedSsid), nameof(SelectedBssid), nameof(SelectedChannel), nameof(SelectedBand),
+        foreach (var name in new[] { nameof(HasAccessPoints), nameof(SelectedSsid), nameof(SelectedBssid), nameof(SelectedChannel), nameof(SelectedBand),
             nameof(Samples), nameof(Statistics), nameof(SampleCount), nameof(HasSamples), nameof(CurrentRssiText), nameof(AverageRssiText),
             nameof(MinimumRssiText), nameof(MaximumRssiText), nameof(LastSeenText), nameof(SignalQualityText) }) OnPropertyChanged(name);
         NotifyControls();

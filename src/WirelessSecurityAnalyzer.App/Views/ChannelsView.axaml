@@ -12,11 +12,13 @@
       <Grid ColumnDefinitions="160,*,Auto,Auto" ColumnSpacing="10">
         <ComboBox x:Name="ChannelBandSelector" ItemsSource="{Binding Bands}" SelectedIndex="{Binding SelectedBandIndex}" HorizontalAlignment="Stretch" />
         <TextBlock Grid.Column="1" Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" />
-        <Button Grid.Column="2" x:Name="RefreshButton" Content="Обновить анализ" Command="{Binding RefreshAnalysisCommand}" />
-        <Button Grid.Column="3" Content="Отмена" Command="{Binding RefreshAnalysisCancelCommand}" IsVisible="{Binding IsBusy}" />
+        <Button Grid.Column="2" x:Name="RefreshButton" Content="Обновить эфир" Command="{Binding RefreshAnalysisCommand}" />
+        <Button Grid.Column="3" Content="Остановить" Command="{Binding RefreshAnalysisCancelCommand}" IsVisible="{Binding IsBusy}" />
       </Grid>
       <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="3" />
       <ContentControl Content="{Binding}" ContentTemplate="{StaticResource WifiErrorTemplate}" IsVisible="{Binding HasError}" />
+      <Button Content="Выбрать сеть в «Эфире»" Classes="link" IsVisible="{Binding !HasScanSnapshot}" HorizontalAlignment="Left"
+              Command="{ReflectionBinding $parent[Window].DataContext.NavigateCommand}" CommandParameter="Эфир" />
       <WrapPanel>
         <TextBlock Text="{Binding SnapshotText}" Classes="subtitle" Margin="0,0,20,4" />
         <TextBlock Text="{Binding BssCount, StringFormat='BSS в диапазоне: {0}'}" Classes="subtitle" Margin="0,0,20,4" />
@@ -42,7 +44,7 @@
           <TextBlock Text="Рекомендация эвристическая. Набор каналов-кандидатов не проверен для вашего региона и адаптера; доступность канала нужно сверить с настройками роутера." Classes="subtitle" FontSize="12" />
         </StackPanel>
       </Border>
-      <TextBlock Text="Оценка рассчитывается по RSSI и перекрытию Wi-Fi BSS. Это нормализованный показатель 0–100%, а не измерение фактической загрузки эфира. Реальная ширина BSS неизвестна: используется приближённая модель." Classes="subtitle" FontSize="12" />
+      <TextBlock Text="Оценка 0-100% по RSSI и перекрытию BSS, а не измеренный airtime. Ширина канала моделируется приближённо." Classes="subtitle" FontSize="12" />
       <Border Classes="card" IsVisible="{Binding HasChannelRows}" Padding="0" Height="330" ClipToBounds="True">
         <TableView x:Name="ChannelTable" ItemsSource="{Binding Channels}" CanUserResizeColumns="True">
           <TableView.Columns>

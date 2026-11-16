@@ -1,18 +1,16 @@
 using Avalonia;
 using Serilog;
+using WirelessSecurityAnalyzer.App.Services;
 
 namespace WirelessSecurityAnalyzer.App;
 
 internal static class Program
 {
+    internal static LoggingSettingsService LoggingSettings { get; } = new();
     [STAThread]
     public static int Main(string[] args)
     {
-        var logs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "WirelessSecurityAnalyzer", "Logs");
-        Log.Logger = new LoggerConfiguration().MinimumLevel.Information()
-            .WriteTo.File(Path.Combine(logs, "app-.log"), rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 14, shared: true).CreateLogger();
+        Log.Logger = LoggingSettings.InitializeLogger();
         try
         {
             Log.Information("Application startup on {Platform}; version {Version}",

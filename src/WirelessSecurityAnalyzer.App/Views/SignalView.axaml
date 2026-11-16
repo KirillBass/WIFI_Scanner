@@ -8,6 +8,8 @@
     <StackPanel Spacing="5">
       <TextBlock Text="Сигнал" Classes="title" />
       <TextBlock Text="История RSSI выбранного BSSID · последние 300 измерений" Classes="subtitle" />
+      <Button Content="Найти точки доступа в «Эфире»" Classes="link" IsVisible="{Binding !HasAccessPoints}" HorizontalAlignment="Left"
+              Command="{ReflectionBinding $parent[Window].DataContext.NavigateCommand}" CommandParameter="Эфир" />
     </StackPanel>
     <Border Grid.Row="1" Classes="card">
       <Grid ColumnDefinitions="*,190" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="9">

@@ -62,7 +62,7 @@ public sealed class NetworkAuditService : INetworkAuditService, IDisposable
             var ports = PortScanProfiles.GetPorts(request);
             var session = _sessions.Current;
             if (!session.IsReadyForAudit || session.Network is null)
-                throw new InvalidOperationException("Подключитесь к Wi-Fi и дождитесь получения IPv4.");
+                throw new InvalidOperationException("Выберите активный IPv4-интерфейс в разделе «Устройства».");
             var refresh = IsTargeted(request) && request.TargetAddress is null && NeedsDiscovery(session);
             if (refresh && (_devices.Current.IsDiscovering || _devices.Current.IsMonitoring))
                 throw new InvalidOperationException("Остановите текущий поиск или мониторинг устройств перед обновлением целей аудита.");

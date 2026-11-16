@@ -17,7 +17,8 @@ public sealed class NetworkSessionService(TimeProvider? timeProvider = null) : I
     public NetworkSession SetConnection(WifiConnectionInfo connection, LocalNetworkInfo? network, Guid? expectedSession = null) => Change(old =>
     {
         if (expectedSession is { } expected && expected != old.SessionId) return old;
-        var same = old.InterfaceId == connection.InterfaceId && old.Ssid == connection.Ssid && old.SessionId != Guid.Empty;
+        var same = old.InterfaceId == connection.InterfaceId && old.SessionId != Guid.Empty &&
+            (old.Ssid == connection.Ssid || old.IsInterfaceSelection && network is not null && old.Network?.HasSameContext(network) == true);
         if (old.Network is not null && network is null) same = false;
         if (old.Network is { } previous && network is not null && !previous.HasSameContext(network)) same = false;
         var security = old.Security.Protocol == connection.Security.Protocol && old.Security.Authentication == connection.Security.Authentication &&
@@ -31,7 +32,14 @@ public sealed class NetworkSessionService(TimeProvider? timeProvider = null) : I
 
     public void SetState(Guid sessionId, WifiConnectionState state) => Change(old => old.SessionId == sessionId
         ? old with { State = state, Network = state == WifiConnectionState.Failed ? null : old.Network } : old);
-    public void Clear() => Change(old => NetworkSession.Empty with { Version = old.Version });
+    public NetworkSession SelectNetwork(LocalNetworkInfo network) => Change(old =>
+        old.IsReadyForAudit && old.Network?.HasSameContext(network) == true ? old :
+            new NetworkSession(Guid.NewGuid(), old.Version, WifiConnectionState.Ready, null, null,
+                Guid.TryParse(network.InterfaceId, out var id) ? id : null, network.Name, network,
+                _clock.GetUtcNow(), WifiSecurityInfo.Unknown) { IsInterfaceSelection = true });
+
+    public void Clear(Guid? expectedSession = null) => Change(old =>
+        expectedSession is { } expected && old.SessionId != expected ? old : NetworkSession.Empty with { Version = old.Version });
 
     private NetworkSession Change(Func<NetworkSession, NetworkSession> update)
     {

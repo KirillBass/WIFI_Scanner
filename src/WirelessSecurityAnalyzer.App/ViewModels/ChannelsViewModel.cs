@@ -41,7 +41,7 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
     [ObservableProperty] private bool _isBusy;
 
     protected override string UnexpectedErrorMessage => "Не удалось обновить анализ каналов. Подробности сохранены в локальном журнале.";
-    protected override string FailureStatus => "Операция не выполнена. Последний успешный снимок сохранён.";
+    protected override string FailureStatus => _scanSnapshot is null ? "Не удалось получить снимок эфира." : "Не удалось обновить эфир. Показан предыдущий снимок.";
 
     public WifiBand SelectedBand => SelectedBandIndex switch { 1 => WifiBand.Ghz5, 2 => WifiBand.Ghz6, _ => WifiBand.Ghz2_4 };
     public string SelectedBandText => Bands[Math.Clamp(SelectedBandIndex, 0, 2)];
@@ -49,6 +49,7 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
     public IReadOnlyList<ChannelRowViewModel> Channels { get; private set; } = [];
     public IReadOnlyList<ChannelSpectrumCurve> Spectrum => Analysis?.Spectrum ?? Array.Empty<ChannelSpectrumCurve>();
     public bool HasAnalysis => Spectrum.Count > 0;
+    public bool HasScanSnapshot => _scanSnapshot is not null;
     public bool HasChannelRows => HasAnalysis && Channels.Count > 0;
     public int BssCount => Spectrum.Count;
     public string SnapshotText => _scanSnapshot is null ? "Снимок ещё не получен" :
@@ -190,7 +191,7 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
             ShowError(exception);
         }
         foreach (var name in new[] { nameof(SelectedBand), nameof(SelectedBandText), nameof(Analysis), nameof(Channels),
-            nameof(Spectrum), nameof(HasAnalysis), nameof(HasChannelRows), nameof(BssCount), nameof(SnapshotText),
+            nameof(Spectrum), nameof(HasAnalysis), nameof(HasScanSnapshot), nameof(HasChannelRows), nameof(BssCount), nameof(SnapshotText),
             nameof(RecommendationText), nameof(RecommendedScoreText), nameof(EmptyText), nameof(HasDataNotes), nameof(DataNotesText) }) OnPropertyChanged(name);
     }
 }

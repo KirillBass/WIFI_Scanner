@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using WirelessSecurityAnalyzer.App.ViewModels;
 using WirelessSecurityAnalyzer.App.Views;
+using WirelessSecurityAnalyzer.App.Services;
 using WirelessSecurityAnalyzer.Core.Interfaces;
 using WirelessSecurityAnalyzer.Core.Analysis.Channels;
 using WirelessSecurityAnalyzer.Core.Models;
@@ -29,6 +30,8 @@ public partial class App : Application
         {
             var services = new ServiceCollection();
             services.AddSingleton<ILogger>(Log.Logger);
+            services.AddSingleton(Program.LoggingSettings);
+            services.AddSingleton<IUserFolderService, UserFolderService>();
             services.AddSingleton<WifiOperationCoordinator>();
             services.AddSingleton<INetworkSessionService, NetworkSessionService>();
             services.AddSingleton<NetworkSessionViewModel>();

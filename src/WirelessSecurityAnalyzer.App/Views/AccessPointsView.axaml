@@ -2,12 +2,12 @@
              xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels" xmlns:controls="using:WirelessSecurityAnalyzer.App.Controls"
              x:Class="WirelessSecurityAnalyzer.App.Views.AccessPointsView" x:DataType="vm:AccessPointsViewModel">
   <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto" RowSpacing="8">
-    <StackPanel Spacing="4"><TextBlock Text="Эфир" Classes="title" /><TextBlock Text="Доступные точки доступа" Classes="subtitle" /><TextBlock Text="{Binding AdapterText}" Classes="subtitle" /></StackPanel>
+    <StackPanel Spacing="4"><TextBlock Text="Эфир" Classes="title" /><TextBlock Text="{Binding AdapterText}" Classes="subtitle" /></StackPanel>
     <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="10">
-      <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding StatusText}" IsVisible="{Binding ShowScanStatus}" VerticalAlignment="Center" TextWrapping="Wrap" />
       <Button Grid.Column="1" Content="Подключиться" Command="{Binding ConnectCommand}" />
-      <Button Grid.Column="2" Content="Сканировать" Command="{Binding ScanCommand}" />
-      <Button Grid.Column="3" Content="Отмена" Command="{Binding ScanCancelCommand}" IsVisible="{Binding IsBusy}" />
+      <Button Grid.Column="2" Content="Сканировать" Classes="primary" Command="{Binding ScanCommand}" />
+      <Button Grid.Column="3" Content="Остановить" Command="{Binding ScanCancelCommand}" IsVisible="{Binding IsBusy}" />
     </Grid>
     <ContentControl Grid.Row="2" Content="{Binding}" ContentTemplate="{StaticResource WifiErrorTemplate}" IsVisible="{Binding HasError}" />
     <Grid Grid.Row="3" ColumnDefinitions="*,170,Auto" ColumnSpacing="12">
@@ -43,8 +43,8 @@
           </TableView.Columns>
         </TableView>
         <StackPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" Margin="24">
-          <TextBlock Text="Нет точек доступа для отображения" HorizontalAlignment="Center" />
-          <TextBlock Text="Выполните сканирование или измените фильтры." Classes="subtitle" HorizontalAlignment="Center" />
+          <TextBlock Text="{Binding EmptyText}" HorizontalAlignment="Center" TextWrapping="Wrap" />
+          <Button Content="Обновить адаптеры" Command="{Binding RefreshAdaptersCommand}" HorizontalAlignment="Center" IsVisible="{Binding !HasAdapter}" />
         </StackPanel>
       </Grid>
     </Border>
@@ -59,7 +59,7 @@
     <Grid Grid.Row="6" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
       <ProgressBar Grid.ColumnSpan="2" IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="3" />
       <TextBlock Grid.Row="1" Text="{Binding LastScanText}" Classes="subtitle" />
-      <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TotalCount, StringFormat='Всего BSS: {0}'}" Classes="subtitle" />
+      <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ResultCaption}" IsVisible="{Binding AreResultsPrevious}" Classes="subtitle" />
     </Grid>
   </Grid>
 </UserControl>

@@ -1,126 +1,91 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels" xmlns:audit="using:WirelessSecurityAnalyzer.Core.NetworkAudit"
              x:Class="WirelessSecurityAnalyzer.App.Views.NetworkAuditView" x:DataType="vm:NetworkAuditViewModel">
-  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-    <StackPanel Spacing="8">
-      <TextBlock Text="Сетевой аудит" Classes="title" />
-      <TextBlock Text="{Binding Session.Status}" TextWrapping="Wrap" />
-      <WrapPanel>
-        <TextBlock Text="{Binding Session.Ssid, StringFormat='SSID: {0}'}" Margin="0,0,20,4" />
-        <TextBlock Text="IPv4: " /><TextBlock Text="{Binding Session.Ipv4}" Margin="0,0,20,4" />
-        <TextBlock Text="{Binding Session.Subnet, StringFormat='Подсеть: {0}'}" Margin="0,0,20,4" />
-        <TextBlock Text="{Binding Session.Gateway, StringFormat='Шлюз: {0}'}" />
-      </WrapPanel>
-      <TextBlock Text="{Binding Session.InterfaceName, StringFormat='Адаптер: {0}'}" TextWrapping="Wrap" Classes="subtitle" />
-      <Expander Header="Сведения о подключении" HorizontalAlignment="Stretch">
-        <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="4">
-          <TextBlock Text="BSSID:" /><TextBlock Grid.Column="1" Text="{Binding Session.Bssid}" />
-          <TextBlock Grid.Row="1" Text="Безопасность:" /><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Session.Security}" TextWrapping="Wrap" />
-          <TextBlock Grid.Row="2" Text="Подключено:" /><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Session.ConnectedAt}" />
-        </Grid>
-      </Expander>
-      <WrapPanel>
-        <Button Content="Обновить устройства" Command="{Binding RefreshDevicesCommand}" Margin="0,0,8,4" />
-        <Button Content="Начать обычный аудит" Command="{Binding StartAuditCommand}" Margin="0,0,8,4" />
-        <Button Content="Найти целевые серверы" Command="{Binding FindTargetServersCommand}" Margin="0,0,8,4" />
-        <Button Content="Остановить аудит" Command="{Binding StopAuditCommand}" Margin="0,0,8,4" />
-        <Button Content="Отключиться" Command="{Binding DisconnectCommand}" Margin="0,0,8,4" />
-      </WrapPanel>
-      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" IsEnabled="{Binding CanConfigure}">
-        <TextBlock Text="Профиль портов:" VerticalAlignment="Center" />
-        <ComboBox Grid.Column="1" ItemsSource="{Binding Profiles}" SelectedIndex="{Binding SelectedProfileIndex}" HorizontalAlignment="Stretch" />
-        <CheckBox Grid.Column="2" Content="Включить этот ПК" IsChecked="{Binding IncludeLocal}" />
-      </Grid>
-      <TextBox Text="{Binding CustomPorts}" IsVisible="{Binding IsCustomProfile}" IsEnabled="{Binding CanConfigure}" PlaceholderText="22,80,443,8000-8010" />
-      <TextBlock Text="Полный профиль проверит 65535 портов каждого устройства и может занять длительное время." IsVisible="{Binding IsFullProfile}" TextWrapping="Wrap" />
-      <Expander Header="Целевой поиск SMB / FTP / Web" IsEnabled="{Binding CanConfigure}" HorizontalAlignment="Stretch">
-        <StackPanel Spacing="6">
-          <TextBlock Text="При быстром профиле: 21, 80, 443, 445, 8000, 8080, 8443/TCP. Для стандартного, полного и пользовательского профиля применяются выбранные выше порты. Проверяются все обнаруженные узлы текущей сети." TextWrapping="Wrap" />
-          <TextBlock Text="Дополнительные TCP-порты:" />
-          <TextBox Text="{Binding AdditionalTargetPorts}" PlaceholderText="Необязательно: 2121,8081,8888,9443 или диапазон" />
-          <TextBlock Text="Дополнительные порты используются кнопкой «Найти целевые серверы». Совпадение требует подтверждения протокола; производитель и тип устройства не влияют на отбор." Classes="subtitle" TextWrapping="Wrap" />
-        </StackPanel>
-      </Expander>
-      <Expander Header="Поиск сайтов на всех портах одного устройства" HorizontalAlignment="Stretch">
-        <StackPanel Spacing="6">
-          <TextBlock Text="После первого аудита выберите устройство. Новый аудит проверит на нём TCP-порты 1-65535 и покажет подтверждённые SMB, FTP и веб-службы. Поиск может занять больше времени; его можно остановить." TextWrapping="Wrap" />
-          <ComboBox ItemsSource="{Binding FullScanTargets}" SelectedItem="{Binding SelectedFullScanTarget}" IsEnabled="{Binding CanConfigure}" HorizontalAlignment="Stretch">
-            <ComboBox.ItemTemplate>
-              <DataTemplate x:DataType="audit:AuditTarget"><TextBlock Text="{Binding DisplayText}" /></DataTemplate>
-            </ComboBox.ItemTemplate>
-          </ComboBox>
-          <Button Content="Проверить все TCP-порты этого устройства" Command="{Binding FindAllSitesOnDeviceCommand}" HorizontalAlignment="Left" />
-        </StackPanel>
-      </Expander>
-      <Expander Header="Параметры TCP-проверки" IsEnabled="{Binding CanConfigure}" HorizontalAlignment="Stretch">
-        <StackPanel Orientation="Horizontal" Spacing="10">
-          <TextBlock Text="Параллельных задач:" VerticalAlignment="Center" />
-          <NumericUpDown Value="{Binding Concurrency}" Minimum="1" Maximum="128" Increment="1" FormatString="0" Width="110" />
-          <TextBlock Text="Таймаут TCP, мс:" VerticalAlignment="Center" />
-          <NumericUpDown Value="{Binding ConnectTimeoutMs}" Minimum="100" Maximum="10000" Increment="50" FormatString="0" Width="130" />
-        </StackPanel>
-      </Expander>
-      <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding HasError}" TextWrapping="Wrap" Foreground="{DynamicResource ErrorBrush}" />
-      <TextBlock Text="{Binding DeviceCount, StringFormat='Обнаружено устройств текущей сети: {0}. Шлюз добавляется автоматически; этот компьютер - по флажку.'}" TextWrapping="Wrap" Classes="subtitle" />
-      <StackPanel IsVisible="{Binding IsPreparingDiscovery}" Spacing="4">
-        <TextBlock Text="Обнаружение узлов перед целевым аудитом:" />
-        <ProgressBar Value="{Binding Devices.ProgressPercent}" Minimum="0" Maximum="100" Height="4" />
-        <TextBlock Text="{Binding Devices.ProgressText}" TextWrapping="Wrap" Classes="subtitle" />
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="8">
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+      <StackPanel Spacing="4">
+        <TextBlock Text="Сетевой аудит" Classes="title" />
+        <TextBlock Text="{Binding Session.Summary}" Classes="subtitle" />
       </StackPanel>
-      <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />
-      <ProgressBar Value="{Binding ProgressPercent}" Minimum="0" Maximum="100" Height="4" />
-      <TextBlock Text="{Binding ProgressText}" TextWrapping="Wrap" Classes="subtitle" />
-      <TextBlock Text="{Binding WebProgressText}" TextWrapping="Wrap" Classes="subtitle" />
-      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-        <TextBlock Text="Отображение:" VerticalAlignment="Center" />
+      <Button Grid.Column="1" x:Name="AuditPrimaryButton" Content="{Binding PrimaryActionText}" Command="{Binding PrimaryActionCommand}" Classes="primary" VerticalAlignment="Center" />
+    </Grid>
+    <StackPanel Grid.Row="1" Spacing="5">
+      <TextBlock Text="{Binding ReadinessText}" Classes="subtitle" />
+      <Button Content="Перейти к устройствам" Classes="link" IsVisible="{Binding Session.IsReady}" HorizontalAlignment="Left"
+              Command="{ReflectionBinding $parent[Window].DataContext.NavigateCommand}" CommandParameter="Устройства" />
+    </StackPanel>
+    <Expander Grid.Row="2" Header="Дополнительно" IsExpanded="{Binding IsAdvancedExpanded}" HorizontalAlignment="Stretch">
+      <ScrollViewer MaxHeight="230" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="9" Margin="0,4,6,6" IsEnabled="{Binding CanConfigure}">
+          <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+            <TextBlock Text="Порты:" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" ItemsSource="{Binding Profiles}" SelectedIndex="{Binding SelectedProfileIndex}" HorizontalAlignment="Stretch" />
+            <CheckBox Grid.Column="2" Content="Включить этот ПК" IsChecked="{Binding IncludeLocal}" />
+          </Grid>
+          <TextBox Text="{Binding CustomPorts}" IsVisible="{Binding IsCustomProfile}" PlaceholderText="22,80,443,8000-8010" />
+          <TextBlock Text="Полный профиль проверяет 65535 портов каждого узла и может занять длительное время." IsVisible="{Binding IsFullProfile}" Classes="subtitle" />
+          <TextBlock Text="Быстрый профиль проверяет SMB, FTP, HTTP и HTTPS на распространённых портах. Дополнительные порты поиска серверов:" Classes="subtitle" />
+          <TextBox Text="{Binding AdditionalTargetPorts}" PlaceholderText="Например: 2121,8081,8888 или диапазон" />
+          <WrapPanel>
+            <TextBlock Text="Параллельных проверок:" VerticalAlignment="Center" Margin="0,0,8,4" />
+            <NumericUpDown Value="{Binding Concurrency}" Minimum="1" Maximum="128" Increment="1" FormatString="0" Width="95" Margin="0,0,20,4" />
+            <TextBlock Text="Таймаут TCP, мс:" VerticalAlignment="Center" Margin="0,0,8,4" />
+            <NumericUpDown Value="{Binding ConnectTimeoutMs}" Minimum="100" Maximum="10000" Increment="50" FormatString="0" Width="115" />
+          </WrapPanel>
+          <TextBlock Text="Все порты одного устройства" Classes="section" />
+          <TextBlock Text="После первого аудита выберите IP. Будут проверены порты 1-65535 только этого узла." Classes="subtitle" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+            <ComboBox ItemsSource="{Binding FullScanTargets}" SelectedItem="{Binding SelectedFullScanTarget}" HorizontalAlignment="Stretch" PlaceholderText="Устройство из результатов аудита">
+              <ComboBox.ItemTemplate><DataTemplate x:DataType="audit:AuditTarget"><TextBlock Text="{Binding DisplayText}" /></DataTemplate></ComboBox.ItemTemplate>
+            </ComboBox>
+            <Button Grid.Column="1" Content="Проверить все порты" Command="{Binding FindAllSitesOnDeviceCommand}" />
+          </Grid>
+          <TextBlock Text="Другие действия" Classes="section" />
+          <WrapPanel>
+            <Button Content="Обновить устройства" Command="{Binding RefreshDevicesCommand}" Margin="0,0,8,4" />
+            <Button Content="Обычный аудит всех служб" Command="{Binding StartAuditCommand}" Margin="0,0,8,4" />
+            <Button Content="Отключиться от Wi-Fi" Command="{Binding DisconnectCommand}" />
+          </WrapPanel>
+          <TextBlock Text="{Binding Session.Subnet, StringFormat='Подсеть: {0}'}" Classes="subtitle" />
+          <TextBlock Text="{Binding Session.Gateway, StringFormat='Шлюз: {0}'}" Classes="subtitle" />
+          <TextBlock Text="{Binding Session.Bssid, StringFormat='BSSID: {0}'}" Classes="subtitle" />
+          <TextBlock Text="{Binding Session.Security, StringFormat='Защита Wi-Fi: {0}'}" Classes="subtitle" />
+          <TextBlock Text="{Binding Session.ConnectedAt, StringFormat='Начало сессии: {0}'}" Classes="subtitle" />
+        </StackPanel>
+      </ScrollViewer>
+    </Expander>
+    <StackPanel Grid.Row="3" Spacing="6">
+      <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding HasError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding CompactStatus}" TextWrapping="Wrap" />
+      <ProgressBar Value="{Binding ProgressPercent}" IsVisible="{Binding IsAuditing}" Minimum="0" Maximum="100" Height="4" />
+      <Grid ColumnDefinitions="*,190,140,90" ColumnSpacing="8">
+        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="IP, имя, служба или продукт" />
         <ComboBox Grid.Column="1" ItemsSource="{Binding DisplayModes}" SelectedIndex="{Binding SelectedDisplayModeIndex}" HorizontalAlignment="Stretch" />
-      </Grid>
-      <TextBlock Text="{Binding TargetStatusText}" TextWrapping="Wrap" />
-      <TextBlock Text="{Binding CheckedPortsText}" Classes="subtitle" TextWrapping="Wrap" />
-      <TextBlock Text="{Binding ScopeNote}" Classes="subtitle" TextWrapping="Wrap" />
-      <Grid ColumnDefinitions="*,160,130" ColumnSpacing="10">
-        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Поиск по IP, имени, службе или продукту" />
-        <ComboBox Grid.Column="1" ItemsSource="{Binding ServiceFilters}" SelectedIndex="{Binding SelectedServiceIndex}" HorizontalAlignment="Stretch" />
-        <TextBox Grid.Column="2" Text="{Binding PortFilter, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="TCP-порт" />
+        <ComboBox Grid.Column="2" ItemsSource="{Binding ServiceFilters}" SelectedIndex="{Binding SelectedServiceIndex}" HorizontalAlignment="Stretch" />
+        <TextBox Grid.Column="3" Text="{Binding PortFilter, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Порт" />
       </Grid>
       <TextBlock Text="{Binding FilterError}" IsVisible="{Binding HasFilterError}" Foreground="{DynamicResource ErrorBrush}" />
-      <Border Classes="card" Padding="0" Height="300">
-        <Grid>
+    </StackPanel>
+    <Border Grid.Row="4" Classes="card" Padding="0" MinHeight="140">
+      <Grid>
         <TableView ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" CanUserResizeColumns="True" ScrollViewer.AllowAutoHide="False">
           <TableView.Columns>
             <TableViewColumn Header="IP" Binding="{ReflectionBinding Address}" Width="130" />
             <TableViewColumn Header="Имя устройства" Binding="{ReflectionBinding Name}" Width="170" />
             <TableViewColumn Header="Порт" Binding="{ReflectionBinding Port}" Width="65" />
-            <TableViewColumn Header="Транспорт" Binding="{ReflectionBinding Transport}" Width="85" />
             <TableViewColumn Header="Протокол" Binding="{ReflectionBinding Protocol}" Width="85" />
             <TableViewColumn Header="Продукт" Binding="{ReflectionBinding Product}" Width="150" />
-            <TableViewColumn Header="Версия" Binding="{ReflectionBinding Version}" Width="100" />
-            <TableViewColumn Header="Достоверность" Binding="{ReflectionBinding Confidence}" Width="120" />
-            <TableViewColumn Header="Проверено" Binding="{ReflectionBinding CheckedAtText}" Width="130" />
             <TableViewColumn Header="HTTP-сайт / страницы" Binding="{ReflectionBinding SiteSummary}" Width="350" />
           </TableView.Columns>
         </TableView>
-        <TextBlock Text="{Binding EmptyResultsText}" IsVisible="{Binding IsResultsEmpty}" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16" />
-        </Grid>
-      </Border>
-      <Expander Header="По узлам: подтверждения и состояние проверки" HorizontalAlignment="Stretch">
-        <Border Classes="card" Padding="0" Height="200">
-          <TableView ItemsSource="{Binding Hosts}" CanUserResizeColumns="True" ScrollViewer.AllowAutoHide="False">
-            <TableView.Columns>
-              <TableViewColumn Header="IP" Binding="{ReflectionBinding Address}" Width="130" />
-              <TableViewColumn Header="Имя" Binding="{ReflectionBinding Name}" Width="170" />
-              <TableViewColumn Header="Состояние проверки" Binding="{ReflectionBinding StateText}" Width="260" />
-              <TableViewColumn Header="Целевых служб" Binding="{ReflectionBinding EndpointCount}" Width="110" />
-              <TableViewColumn Header="Порт/служба" Binding="{ReflectionBinding Services}" Width="220" />
-              <TableViewColumn Header="Проверено портов" Binding="{ReflectionBinding CheckedPortsText}" Width="130" />
-              <TableViewColumn Header="Набор TCP-портов" Binding="{ReflectionBinding PortsText}" Width="220" />
-              <TableViewColumn Header="Последняя проверка" Binding="{ReflectionBinding LastCheckedText}" Width="135" />
-            </TableView.Columns>
-          </TableView>
-        </Border>
-      </Expander>
-      <TextBlock Text="{Binding ResultCount}" Classes="subtitle" />
-      <Border Classes="card" Padding="10"><TextBlock Text="{Binding SelectionDetails}" TextWrapping="Wrap" /></Border>
+        <TextBlock Text="{Binding EmptyResultsText}" IsVisible="{Binding IsResultsEmpty}" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20" MaxWidth="650" />
+      </Grid>
+    </Border>
+    <Expander Grid.Row="5" Header="Сведения о службе, сайты и подробности проверки" IsExpanded="{Binding IsDetailsExpanded}" HorizontalAlignment="Stretch">
+      <ScrollViewer MaxHeight="250" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="8" Margin="0,4,6,6">
+          <TextBlock Text="{Binding ResultCount}" Classes="subtitle" />
+          <TextBlock Text="{Binding SelectionDetails}" TextWrapping="Wrap" />
       <StackPanel Spacing="6" IsVisible="{Binding HasSites}">
         <TextBlock Text="HTTP-сайты выбранной службы" FontWeight="SemiBold" />
         <ComboBox ItemsSource="{Binding SelectedSites}" SelectedItem="{Binding SelectedSite}" HorizontalAlignment="Stretch">
@@ -145,7 +110,30 @@
           </Border>
         </Expander>
       </StackPanel>
-      <TextBlock Text="Проверяются только найденные узлы текущей подсети. Результат означает «доступно с узла, выполняющего аудит». Открытый порт не доказывает наличие конкретной службы. Таймаут может означать фильтрацию, сон устройства или отсутствие ответа. Результаты хранятся до нового аудита, смены сети или закрытия программы." Classes="subtitle" FontSize="12" TextWrapping="Wrap" />
-    </StackPanel>
-  </ScrollViewer>
+      <Expander Header="По узлам: подтверждения и состояние проверки" HorizontalAlignment="Stretch">
+        <Border Classes="card" Padding="0" Height="200">
+          <TableView ItemsSource="{Binding Hosts}" CanUserResizeColumns="True" ScrollViewer.AllowAutoHide="False">
+            <TableView.Columns>
+              <TableViewColumn Header="IP" Binding="{ReflectionBinding Address}" Width="130" />
+              <TableViewColumn Header="Имя" Binding="{ReflectionBinding Name}" Width="170" />
+              <TableViewColumn Header="Состояние проверки" Binding="{ReflectionBinding StateText}" Width="260" />
+              <TableViewColumn Header="Целевых служб" Binding="{ReflectionBinding EndpointCount}" Width="110" />
+              <TableViewColumn Header="Порт/служба" Binding="{ReflectionBinding Services}" Width="220" />
+              <TableViewColumn Header="Проверено портов" Binding="{ReflectionBinding CheckedPortsText}" Width="130" />
+              <TableViewColumn Header="Набор TCP-портов" Binding="{ReflectionBinding PortsText}" Width="220" />
+              <TableViewColumn Header="Последняя проверка" Binding="{ReflectionBinding LastCheckedText}" Width="135" />
+            </TableView.Columns>
+          </TableView>
+        </Border>
+      </Expander>
+          <TextBlock Text="{Binding ProgressText}" Classes="subtitle" />
+          <TextBlock Text="{Binding WebProgressText}" Classes="subtitle" />
+          <TextBlock Text="{Binding TargetStatusText}" Classes="subtitle" />
+          <TextBlock Text="{Binding CheckedPortsText}" Classes="subtitle" />
+          <TextBlock Text="{Binding ScopeNote}" Classes="subtitle" />
+          <TextBlock Text="Доступность проверяется с выбранного интерфейса. Открытый порт сам по себе не подтверждает службу; таймаут не доказывает отсутствие устройства." Classes="subtitle" />
+        </StackPanel>
+      </ScrollViewer>
+    </Expander>
+  </Grid>
 </UserControl>

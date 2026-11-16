@@ -17,6 +17,9 @@ public sealed class NetworkSessionViewModel : ViewModelBase, IDisposable
     public NetworkSession Current { get; private set; }
     public bool IsConnected => Current.IsConnected;
     public bool IsReady => Current.IsReadyForAudit;
+    public bool IsObtainingAddress => Current.State is WifiConnectionState.Connected or WifiConnectionState.ObtainingAddress;
+    public bool CanDisconnectWifi => IsConnected && !Current.IsInterfaceSelection && Current.Network?.IsWireless != false;
+    public void SelectNetwork(LocalNetworkInfo network) => _sessions.SelectNetwork(network);
     public bool IsConnecting => Current.State is WifiConnectionState.Connecting or WifiConnectionState.Authenticating or WifiConnectionState.Disconnecting;
     public string Ssid => Clean(Current.Ssid);
     public string Bssid => Current.Bssid ?? "-";
@@ -31,13 +34,13 @@ public sealed class NetworkSessionViewModel : ViewModelBase, IDisposable
         WifiConnectionState.Connecting => "Подключение к Wi-Fi…",
         WifiConnectionState.Authenticating => "Подключение: проверка аутентификации…",
         WifiConnectionState.Connected or WifiConnectionState.ObtainingAddress => "Подключено к Wi-Fi, получение IP…",
-        WifiConnectionState.Ready => "Подключено к Wi-Fi; сеть готова к аудиту.",
+        WifiConnectionState.Ready => "Выбранная IPv4-сеть готова к поиску устройств и аудиту.",
         WifiConnectionState.Disconnecting => "Отключение от Wi-Fi…",
         WifiConnectionState.Failed => "Подключение не установлено.",
-        _ => "Нет подключения к Wi-Fi."
+        _ => "Выберите сетевой интерфейс или подключитесь к Wi-Fi."
     };
-    public string Summary => Current.State == WifiConnectionState.Disconnected ? "○ Нет подключения" :
-        $"{Status} {Ssid}" + (Current.Ipv4 is null ? "" : $" · {Ipv4}");
+    public string Summary => IsReady ? $"{InterfaceName} · {Ipv4}/{Current.PrefixLength}" +
+        (Current.Ssid is { Length: > 0 } ? $" · {Ssid}" : "") : Status;
 
     public void Refresh() => OnUpdated(_sessions, _sessions.Current);
 

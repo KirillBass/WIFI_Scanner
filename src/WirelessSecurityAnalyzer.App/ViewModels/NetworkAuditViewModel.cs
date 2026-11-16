@@ -30,6 +30,28 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     }
     public NetworkSessionViewModel Session { get; }
     public DevicesViewModel Devices { get; }
+    public event Action<string>? NavigationRequested;
+    public bool HasAudit => _snapshot.AuditId != Guid.Empty;
+    public string PrimaryActionText => IsAuditing ? "Остановить" : Session.IsObtainingAddress ? "Получение IPv4…" : Session.IsReady ? "Найти серверы" : "Выбрать интерфейс";
+    public string ReadinessText => IsAuditing ? "" : Session.IsObtainingAddress ? "Wi-Fi подключён. Дождитесь получения IPv4; при необходимости отмените подключение." :
+        Session.IsConnecting ? "Дождитесь завершения подключения к Wi-Fi." : !Session.IsReady ? "Для аудита нужен активный IPv4-интерфейс. Выберите Ethernet или Wi-Fi в разделе «Устройства»." :
+        Devices.IsMonitoring ? "Сначала остановите мониторинг в разделе «Устройства»." :
+        Devices.IsBusy ? "Выполняется поиск устройств. Дождитесь завершения или остановите его в разделе «Устройства»." :
+        DeviceCount == 0 ? "Поиск сначала обнаружит устройства выбранной сети, затем проверит SMB, FTP и веб-службы." :
+        $"Устройств в текущей сети: {DeviceCount}. При необходимости список обновится перед поиском служб.";
+    public string CompactStatus => _snapshot.Stage switch
+    {
+        AuditStage.Preparing => "Поиск устройств и подготовка целей…",
+        AuditStage.Scanning or AuditStage.Detecting => $"Проверка портов и служб: {_snapshot.Progress.Checked:N0}/{_snapshot.Progress.Total:N0} · подтверждено: {_snapshot.Progress.Identified}",
+        AuditStage.FindingSites => $"Поиск сайтов и страниц · {_allRows.Sum(r => r.HttpSites.Sum(s => s.Pages.Count))} страниц",
+        AuditStage.Completed when !_snapshot.TargetServicesOnly => $"Аудит завершён. Открыто портов: {_snapshot.Progress.Open} · определено служб: {_snapshot.Progress.Identified}",
+        AuditStage.Completed => MatchedEndpointCount == 0 ? "Поиск завершён. Подходящие службы не найдены." :
+            $"Поиск завершён. Подтверждено целевых служб: {MatchedEndpointCount} · узлов: {MatchedHostCount}",
+        AuditStage.Cancelled => "Поиск остановлен. Частичные результаты сохранены.",
+        AuditStage.NetworkChanged => "Сеть изменилась. Поиск остановлен.",
+        AuditStage.Failed => "Поиск завершился с ошибкой. Сохранены доступные результаты.",
+        _ => StatusText
+    };
     public int DeviceCount => Session.Current.Network is { } network && Devices.SelectedNetwork?.HasSameContext(network) == true ? Devices.KnownCount : 0;
     public IReadOnlyList<string> Profiles { get; } = ["Быстрый", "Стандартный (1–1024 + основные)", "Полный (1–65535)", "Пользовательский"];
     public IReadOnlyList<string> ServiceFilters { get; } = ["Все службы", "HTTP", "HTTPS", "SSH", "FTP", "RDP", "SMB", "SMTP", "TLS", "Unknown"];
@@ -60,11 +82,11 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
             return MatchedHostCount > 0 ? counts : "Не найдено подтверждённых SMB/FTP/HTTP/HTTPS-служб среди проверенных портов.";
         }
     }
-    public string EmptyResultsText => IsTargetOnly ? MatchedHostCount > 0
+    public string EmptyResultsText => !HasAudit ? "Здесь появятся найденные службы и сайты." : IsTargetOnly ? MatchedHostCount > 0
         ? "Нет целевых служб, соответствующих дополнительным фильтрам." : TargetStatusText
         : _snapshot.AuditId == Guid.Empty ? "Аудит ещё не выполнялся." : _snapshot.IsRunning
             ? "Проверка продолжается; результатов для отображения пока нет." : "Нет результатов для выбранных фильтров.";
-    public bool CanConfigure => !IsAuditing && !IsBusy;
+    public bool CanConfigure => !IsAuditing && !IsBusy && !Devices.IsBusy && !Devices.IsMonitoring;
     public bool HasError => ErrorMessage.Length > 0;
     public bool HasFilterError => FilterError.Length > 0;
     public bool IsCustomProfile => SelectedProfileIndex == 3;
@@ -83,9 +105,11 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasError))] private string _errorMessage = string.Empty;
     [ObservableProperty] private string _statusText = "Аудит ещё не запускался.";
     [ObservableProperty] private string _progressText = string.Empty;
+    [ObservableProperty] private bool _isAdvancedExpanded;
+    [ObservableProperty] private bool _isDetailsExpanded;
     [ObservableProperty] private double _progressPercent;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(IsCustomProfile), nameof(IsFullProfile))] private int _selectedProfileIndex;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(IsTargetOnly))] private int _selectedDisplayModeIndex;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(IsTargetOnly))] private int _selectedDisplayModeIndex = 1;
     [ObservableProperty] private string _additionalTargetPorts = string.Empty;
     [ObservableProperty] private string _customPorts = "22,80,443,8000-8010";
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(FindAllSitesOnDeviceCommand))] private bool _includeLocal = true;
@@ -101,12 +125,16 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     private HttpSiteResult? _selectedSite;
     partial void OnSelectedRowChanged(AuditRow? value)
     {
+        if (value is null) IsDetailsExpanded = false;
+        if (value is not null && _detailEndpoint != (value.Address, value.Port)) IsDetailsExpanded = true;
+        _detailEndpoint = value is null ? null : (value.Address, value.Port);
         if (value is not null) SelectedFullScanTarget = FullScanTargets.FirstOrDefault(t => t.Address.Equals(value.Target.Address));
         var origin = SelectedSite?.Origin;
         SelectedSite = value?.HttpSites.FirstOrDefault(s => s.Origin == origin) ?? value?.HttpSites.FirstOrDefault();
         OnPropertyChanged(nameof(SelectedSites)); OnPropertyChanged(nameof(HasSites));
     }
     private bool CanOpenSite() => SelectedSite is { HttpConfirmed: true } site && Uri.TryCreate(site.Url, UriKind.Absolute, out var uri) && uri.Scheme == "http" && uri.UserInfo.Length == 0;
+    private (string Address, int Port)? _detailEndpoint;
     [RelayCommand(CanExecute = nameof(CanOpenSite))]
     private void OpenSite()
     {
@@ -119,9 +147,24 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     partial void OnSearchTextChanged(string value) => FilterRows();
     partial void OnPortFilterChanged(string value) => FilterRows();
     partial void OnSelectedServiceIndexChanged(int value) => FilterRows();
-    private bool CanRefreshDevices() => Session.IsReady && !IsBusy && !IsAuditing && !Devices.IsBusy && !Devices.IsMonitoring;
-    private bool CanDisconnect() => Session.IsConnected && !Session.IsConnecting && !IsBusy;
-    private bool CanStartAudit() => _audit is not null && !_audit.Current.IsRunning && Session.IsReady && !IsBusy && !IsAuditing && !Devices.IsBusy;
+    private bool CanRefreshDevices() => !_disposed && Session.IsReady && !IsBusy && !IsAuditing && !Devices.IsBusy && !Devices.IsMonitoring;
+    private bool CanDisconnect() => !_disposed && Session.CanDisconnectWifi && !Session.IsConnecting && !IsBusy;
+    private bool CanStartAudit() => !_disposed && _audit is not null && !_audit.Current.IsRunning && Session.IsReady && !IsBusy && !IsAuditing && !Devices.IsBusy && !Devices.IsMonitoring;
+    private bool CanPrimaryAction() => !_disposed && !IsBusy && (IsAuditing || !Session.IsReady && !Session.IsConnecting && !Session.IsObtainingAddress || CanStartAudit());
+    [RelayCommand(CanExecute = nameof(CanPrimaryAction), AllowConcurrentExecutions = true)]
+    private async Task PrimaryActionAsync()
+    {
+        if (IsAuditing) await StopAsync();
+        else if (!Session.IsReady) NavigationRequested?.Invoke("Устройства");
+        else await FindTargetServersAsync();
+    }
+    partial void OnIsBusyChanged(bool value) => NotifyWorkflow();
+    partial void OnIsAuditingChanged(bool value) => NotifyWorkflow();
+    private void NotifyWorkflow()
+    {
+        foreach (var property in new[] { nameof(HasAudit), nameof(PrimaryActionText), nameof(ReadinessText), nameof(CompactStatus), nameof(CanConfigure) }) OnPropertyChanged(property);
+        PrimaryActionCommand.NotifyCanExecuteChanged();
+    }
     private bool CanStopAudit() => IsAuditing;
     private bool CanFindAllSitesOnDevice() => CanStartAudit() && SelectedFullScanTarget is { } target &&
         (!target.IsLocal || IncludeLocal) && FullScanTargets.Any(t => t.Address.Equals(target.Address));
@@ -211,6 +254,7 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(WebProgressText));
         foreach (var property in new[] { nameof(MatchedHostCount), nameof(MatchedEndpointCount), nameof(TargetStatusText), nameof(CheckedPortsText), nameof(ScopeNote), nameof(IsPreparingDiscovery) }) OnPropertyChanged(property);
         FilterRows();
+        NotifyWorkflow();
     }
     private void FilterRows()
     {
@@ -238,6 +282,7 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(DeviceCount));
         OnPropertyChanged(nameof(IsPreparingDiscovery));
         if (ReferenceEquals(sender, Session) && _audit is not null) Apply(_audit.Current, force: true);
+        NotifyWorkflow();
         RefreshDevicesCommand.NotifyCanExecuteChanged(); DisconnectCommand.NotifyCanExecuteChanged(); StartAuditCommand.NotifyCanExecuteChanged(); FindTargetServersCommand.NotifyCanExecuteChanged(); FindAllSitesOnDeviceCommand.NotifyCanExecuteChanged();
     }
     public Task StopAsync() => _audit?.StopAsync() ?? Task.CompletedTask;

@@ -1,12 +1,27 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels" x:Class="WirelessSecurityAnalyzer.App.Views.SettingsView" x:DataType="vm:SettingsViewModel">
   <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-  <StackPanel Spacing="12">
+  <StackPanel Spacing="14" MaxWidth="950" HorizontalAlignment="Left">
     <TextBlock Text="Настройки" Classes="title" />
-    <StackPanel Spacing="8"><TextBlock Text="Разрешения Windows" Classes="section" /><TextBlock Text="Для доступа к BSSID и окружающим сетям Windows может требовать разрешение определения местоположения. Включите его для классических приложений." Classes="subtitle" /><Button Content="Открыть параметры местоположения" Command="{Binding AccessPoints.OpenLocationSettingsCommand}" HorizontalAlignment="Left" /></StackPanel>
-    <Separator />
-    <StackPanel Spacing="8"><TextBlock Text="Локальные журналы" Classes="section" /><TextBlock Text="{Binding LogsDirectory}" TextWrapping="Wrap" /><TextBlock Text="Сохраняются 14 последних файлов журналов. Данные сетей и журналы не отправляются в интернет." Classes="subtitle" /></StackPanel>
-    <TextBlock Text="Интервал мониторинга 5–60 секунд можно выбрать в разделе «Сигнал». История хранится в памяти до закрытия приложения." Classes="subtitle" />
+    <TextBlock Text="Папка журналов" Classes="section" />
+    <TextBlock Text="Журнал помогает разобраться в ошибках подключения и сканирования." Classes="subtitle" />
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" IsEnabled="{Binding !IsBusy}">
+      <TextBox x:Name="LogDirectoryText" Text="{Binding SelectedDirectory}" IsReadOnly="True" MinWidth="450" />
+      <Button Grid.Column="1" x:Name="ChooseLogDirectoryButton" Content="Изменить…" Command="{Binding ChangeDirectoryCommand}" />
+    </Grid>
+    <WrapPanel>
+      <Button Content="Открыть текущую папку" Command="{Binding OpenDirectoryCommand}" Margin="0,0,10,4" />
+      <Button Content="Сбросить путь по умолчанию" Command="{Binding ResetDirectoryCommand}" />
+    </WrapPanel>
+    <StackPanel Spacing="4" IsVisible="{Binding UsesDifferentDirectory}">
+      <TextBlock Text="Сейчас журнал записывается в:" Classes="subtitle" />
+      <TextBlock Text="{Binding LogsDirectory}" TextWrapping="Wrap" />
+    </StackPanel>
+    <TextBlock Text="{Binding StatusText}" Classes="subtitle" />
+    <ProgressBar IsVisible="{Binding IsBusy}" IsIndeterminate="True" Height="3" />
+    <TextBlock Text="{Binding WarningMessage}" IsVisible="{Binding HasWarning}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" />
+    <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding HasError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" />
+    <TextBlock Text="Журналы хранятся локально. Ротация ежедневная, сохраняются 14 последних файлов." Classes="subtitle" />
   </StackPanel>
   </ScrollViewer>
 </UserControl>

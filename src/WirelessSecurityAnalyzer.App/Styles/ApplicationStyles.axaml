@@ -30,6 +30,22 @@
     <Setter Property="Padding" Value="10,5" />
     <Setter Property="CornerRadius" Value="0" />
   </Style>
+  <Style Selector="Button.primary">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Foreground" Value="White" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Padding" Value="16,8" />
+  </Style>
+  <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Foreground" Value="White" />
+  </Style>
+  <Style Selector="Button.link">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Padding" Value="4,5" />
+  </Style>
   <Style Selector="TextBox"><Setter Property="CornerRadius" Value="0" /></Style>
   <Style Selector="ComboBox"><Setter Property="CornerRadius" Value="0" /></Style>
   <Style Selector="TabStripItem">

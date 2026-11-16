@@ -44,7 +44,7 @@ public abstract partial class WifiViewModelBase(ISystemSettingsService settings,
         {
             Logger.Error(exception, "Opening location settings failed");
             SetError(exception);
-            StatusText = FailureStatus;
+            StatusText = "Не удалось открыть параметры Windows.";
         }
     }
 }
