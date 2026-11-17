@@ -5,11 +5,10 @@
   <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="8">
     <Grid ColumnDefinitions="*,Auto">
       <TextBlock Text="Сигнал" Classes="title" />
-      <Button Grid.Column="1" Content="Найти точки в «Эфире»" Classes="link" IsVisible="{Binding !HasAccessPoints}"
-              Command="{ReflectionBinding $parent[Window].DataContext.NavigateCommand}" CommandParameter="Эфир" />
+
     </Grid>
     <Grid Grid.Row="1" ColumnDefinitions="*,95,Auto,Auto,Auto" ColumnSpacing="8">
-      <ComboBox ItemsSource="{Binding AccessPoints}" SelectedItem="{Binding SelectedAccessPoint}" IsEnabled="{Binding CanChangeSelection}" PlaceholderText="Выберите точку доступа / BSSID" HorizontalAlignment="Stretch">
+      <ComboBox ItemsSource="{Binding AccessPoints}" SelectedItem="{Binding SelectedAccessPoint}" IsEnabled="{Binding CanChangeSelection}" PlaceholderText="Выберите точку доступа / MAC-адрес" HorizontalAlignment="Stretch">
         <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:AccessPointRowViewModel"><TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" /></DataTemplate></ComboBox.ItemTemplate>
       </ComboBox>
       <ComboBox Grid.Column="1" ItemsSource="{Binding IntervalOptions}" SelectedItem="{Binding SelectedIntervalSeconds}" IsEnabled="{Binding CanChangeSelection}" HorizontalAlignment="Stretch" ToolTip.Tip="Интервал мониторинга">
@@ -17,11 +16,11 @@
       </ComboBox>
       <Button Grid.Column="2" Content="Запустить" Classes="primary" Command="{Binding StartMonitoringCommand}" />
       <Button Grid.Column="3" Content="Остановить" Command="{Binding StopMonitoringCommand}" />
-      <Button Grid.Column="4" Content="Очистить историю" Command="{Binding ClearHistoryCommand}" />
+      <Button Grid.Column="4" Content="Очистить" Command="{Binding ClearHistoryCommand}" />
     </Grid>
     <StackPanel Grid.Row="2" Spacing="5">
       <WrapPanel>
-        <TextBlock Text="{Binding SelectedBssid, StringFormat='BSSID: {0}'}" Margin="0,0,16,0" Classes="subtitle" />
+        <TextBlock Text="{Binding SelectedBssid, StringFormat='MAC-адрес: {0}'}" Margin="0,0,16,0" Classes="subtitle" />
         <TextBlock Text="{Binding SelectedChannel, StringFormat='Канал: {0}'}" Margin="0,0,16,0" Classes="subtitle" />
         <TextBlock Text="{Binding SelectedBand}" Classes="subtitle" />
       </WrapPanel>
@@ -46,7 +45,7 @@
     </Border>
     <Grid Grid.Row="5" ColumnDefinitions="*,Auto" IsVisible="{Binding HasSamples}">
       <TextBlock Text="{Binding LastSeenText, StringFormat='Последнее измерение: {0}'}" Classes="subtitle" />
-      <TextBlock Grid.Column="1" Text="{Binding SampleCount, StringFormat='Измерений: {0} / 300'}" Classes="subtitle" />
+
     </Grid>
   </Grid>
 </controls:PlotViewBase>

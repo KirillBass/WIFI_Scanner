@@ -20,7 +20,7 @@ public sealed class AccessPointRowViewModel(WifiAccessPoint accessPoint) : ViewM
         $"Group: {WifiDisplayFormatter.Cipher(_accessPoint.Security.GroupCipher)}\n" +
         $"PMF: {WifiDisplayFormatter.ManagementFrameProtection(_accessPoint.Security)}\n" +
         $"Источник: {WifiDisplayFormatter.Source(_accessPoint.Security.Source)}";
-    public string Details => $"SSID: {Ssid} · BSSID: {Bssid} · Вендор: {Vendor}\n" +
+    public string Details => $"SSID: {Ssid} · MAC-адрес: {Bssid} · Вендор: {Vendor}\n" +
         $"RSSI: {RssiDbm} dBm · Link Quality: {LinkQuality}% · Канал: {Channel} · {Band} · {Frequency}\n" +
         $"Стандарт: {WifiStandard} · Безопасность: {Security} · Аутентификация: {WifiDisplayFormatter.Authentication(_accessPoint.Security.Authentication)}\n" +
         $"Pairwise: {WifiDisplayFormatter.PairwiseCiphers(_accessPoint.Security)} · Group: {WifiDisplayFormatter.Cipher(_accessPoint.Security.GroupCipher)} · PMF: {WifiDisplayFormatter.ManagementFrameProtection(_accessPoint.Security)}\n" +

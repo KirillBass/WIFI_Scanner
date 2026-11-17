@@ -15,17 +15,17 @@
       <ContentControl Content="{Binding}" ContentTemplate="{StaticResource WifiErrorTemplate}" IsVisible="{Binding HasError}" />
     </StackPanel>
     <Grid Grid.Row="3" ColumnDefinitions="*,170,Auto" ColumnSpacing="12">
-      <TextBox PlaceholderText="Поиск по SSID или BSSID" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+      <TextBox PlaceholderText="Поиск по SSID или MAC-адресу" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
       <ComboBox Grid.Column="1" ItemsSource="{Binding BandFilters}" SelectedIndex="{Binding SelectedBandIndex}" HorizontalAlignment="Stretch" />
       <CheckBox Grid.Column="2" Content="Сильные сверху" IsChecked="{Binding StrongestFirst}" />
     </Grid>
     <Border Grid.Row="4" Classes="card" Padding="0" ClipToBounds="True">
-      <Grid>
+      <Grid RowDefinitions="*,Auto">
         <TableView ItemsSource="{Binding AccessPoints}" SelectedItem="{Binding SelectedAccessPoint, Mode=TwoWay}"
                    CanUserResizeColumns="True" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False">
           <TableView.Columns>
             <TableViewColumn Header="SSID" Binding="{ReflectionBinding Ssid}" Width="145" />
-            <TableViewColumn Header="BSSID" Binding="{ReflectionBinding Bssid}" Width="150" />
+            <TableViewColumn Header="MAC-адрес" Binding="{ReflectionBinding Bssid}" Width="150" />
             <TableViewColumn Header="Производитель" Width="140">
               <TableViewColumn.CellTemplate><DataTemplate x:DataType="vm:AccessPointRowViewModel">
                 <TextBlock Text="{Binding Vendor}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Vendor}" />
@@ -50,6 +50,9 @@
           <TextBlock Text="{Binding EmptyText}" HorizontalAlignment="Center" TextWrapping="Wrap" />
           <Button Content="Обновить адаптеры" Command="{Binding RefreshAdaptersCommand}" HorizontalAlignment="Center" IsVisible="{Binding !HasAdapter}" />
         </StackPanel>
+        <Border Grid.Row="1" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="8,5" IsVisible="{Binding HasSnapshot}">
+          <TextBlock x:Name="AccessPointCounter" Text="{Binding AccessPointCountText}" />
+        </Border>
       </Grid>
     </Border>
     <Border Grid.Row="5" Classes="card" IsVisible="{Binding HasSelectedAccessPoint}" MaxHeight="160">

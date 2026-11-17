@@ -5,7 +5,7 @@
   <StackPanel Margin="16" Spacing="10">
     <TextBlock Text="Подключение к сети" Classes="title" />
     <TextBlock Text="{Binding Ssid, StringFormat='SSID: {0}'}" TextWrapping="Wrap" />
-    <TextBlock Text="{Binding Bssid, StringFormat='Выбранный BSSID: {0}'}" />
+    <TextBlock Text="{Binding Bssid, StringFormat='Выбранный MAC-адрес: {0}'}" />
     <TextBlock Text="{Binding Security, StringFormat='Безопасность: {0}'}" />
     <TextBlock Text="Wi-Fi адаптер:" />
     <ComboBox ItemsSource="{Binding Adapters}" SelectedItem="{Binding SelectedAdapter}" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Stretch">

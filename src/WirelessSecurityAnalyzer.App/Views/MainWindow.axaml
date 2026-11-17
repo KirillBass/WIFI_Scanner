@@ -5,6 +5,13 @@
   <Grid RowDefinitions="Auto,*,Auto">
     <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
       <TabStrip ItemsSource="{Binding Navigation}" SelectedItem="{Binding SelectedNavigation, Mode=TwoWay}">
+        <TabStrip.ItemContainerTheme>
+          <ControlTheme TargetType="TabStripItem" BasedOn="{StaticResource {x:Type TabStripItem}}" x:DataType="vm:NavigationItem">
+            <Setter Property="IsEnabled" Value="{Binding IsAvailable}" />
+            <Setter Property="ToolTip.Tip" Value="{Binding UnavailableReason}" />
+            <Setter Property="ToolTip.ShowOnDisabled" Value="True" />
+          </ControlTheme>
+        </TabStrip.ItemContainerTheme>
         <TabStrip.ItemTemplate>
           <DataTemplate x:DataType="vm:NavigationItem"><TextBlock Text="{Binding Title}" /></DataTemplate>
         </TabStrip.ItemTemplate>
@@ -13,7 +20,7 @@
     <ContentControl Grid.Row="1" Content="{Binding CurrentPage}" Margin="12" />
     <Border Grid.Row="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12,4">
       <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
-        <TextBlock Text="Wireless Security Analyzer · версия 13" Classes="subtitle" FontSize="11" />
+        <TextBlock Text="Wireless Security Analyzer · версия 14" Classes="subtitle" FontSize="11" />
         <TextBlock Grid.Column="1" Text="{Binding ActivitySummary}" Classes="subtitle" FontSize="11"
                    TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" HorizontalAlignment="Right" ToolTip.Tip="{Binding ActivitySummary}" />
       </Grid>

@@ -14,15 +14,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
         AccessPoints = accessPoints; _logging = logging ?? new(); _folders = folders ?? new UserFolderService();
         var preferences = _logging.UserPreferences;
         _rememberInterface = preferences.RememberInterface; _startupPage = preferences.StartupPage;
-        _defaultPortProfile = preferences.DefaultPortProfile; _includeLocal = preferences.IncludeLocal; _compactRows = preferences.CompactRows;
+        _includeLocal = preferences.IncludeLocal; _compactRows = preferences.CompactRows;
     }
     public AccessPointsViewModel AccessPoints { get; }
     public IReadOnlyList<string> StartupPages => UserPreferences.Pages;
-    public IReadOnlyList<string> PortProfiles => NetworkAuditViewModel.PortProfiles;
     public string VersionText => "Wireless Security Analyzer · версия " + typeof(SettingsViewModel).Assembly.GetName().Version?.Major;
     [ObservableProperty] private bool _rememberInterface;
     [ObservableProperty] private string _startupPage;
-    [ObservableProperty] private int _defaultPortProfile;
     [ObservableProperty] private bool _includeLocal;
     [ObservableProperty] private bool _compactRows;
     public string LogsDirectory => _logging.ActiveDirectory.Length == 0 ? "Недоступна" : _logging.ActiveDirectory;
@@ -47,7 +45,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             {
                 RememberInterface = RememberInterface,
                 LastInterfaceId = AccessPoints.Session?.Current.Network?.InterfaceId ?? _logging.UserPreferences.LastInterfaceId,
-                StartupPage = StartupPage, DefaultPortProfile = DefaultPortProfile, IncludeLocal = IncludeLocal, CompactRows = CompactRows
+                StartupPage = StartupPage, IncludeLocal = IncludeLocal, CompactRows = CompactRows
             });
             StatusText = "Настройки сохранены. Высота строк применена. Стартовая вкладка и параметры аудита будут использованы при следующем запуске.";
         }

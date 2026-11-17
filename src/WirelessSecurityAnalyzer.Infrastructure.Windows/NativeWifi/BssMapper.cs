@@ -22,9 +22,10 @@ internal static class BssMapper
         var frequency = entry.CenterFrequencyKhz / 1000d;
         var (band, channel) = WifiChannelHelper.FromFrequency(frequency);
         var lastSeen = observedAt;
+        DateTimeOffset? measurementTimestamp = null;
         if (entry.HostTimestamp > 0 && entry.HostTimestamp <= (ulong)long.MaxValue)
         {
-            try { lastSeen = DateTimeOffset.FromFileTime((long)entry.HostTimestamp); }
+            try { measurementTimestamp = lastSeen = DateTimeOffset.FromFileTime((long)entry.HostTimestamp); }
             catch (ArgumentOutOfRangeException) { lastSeen = observedAt; }
         }
         capabilities ??= new WifiCapabilities();
@@ -36,7 +37,8 @@ internal static class BssMapper
             Standard = WifiStandardDetector.Detect(NativeStandard(entry.PhyType, band), capabilities),
             Security = WifiSecurityDetector.Detect(capabilities, privacy, windowsWep, informationElementsAvailable),
             IsSecurityEnabled = privacy || capabilities.HasRsn || capabilities.HasWpa,
-            SsidBytes = Array.AsReadOnly(bytes.ToArray())
+            SsidBytes = Array.AsReadOnly(bytes.ToArray()),
+            MeasurementTimestamp = measurementTimestamp
         };
     }
 

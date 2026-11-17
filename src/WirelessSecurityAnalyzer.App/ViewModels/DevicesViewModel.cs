@@ -53,13 +53,16 @@ public sealed partial class DevicesViewModel : ViewModelBase
     public ObservableCollection<DeviceRowViewModel> Devices { get; } = [];
     public IReadOnlyList<string> StateFilters { get; } = ["Все", "Online · В сети", "Unknown · Неизвестно", "Offline · Недоступно"];
     public IReadOnlyList<string> SortOptions { get; } = ["IP ↑", "Ping ↑", "Последний раз ↓"];
-    public IReadOnlyList<int> Intervals { get; } = [10, 30, 60, 120];
+    public IReadOnlyList<int> Intervals { get; } = [1, 5, 10, 30, 60, 120];
     public int KnownCount => _rows.Count;
     public int OnlineCount => _rows.Count(r => r.Device.State == DeviceState.Online);
     public int UnknownCount => _rows.Count(r => r.Device.State == DeviceState.Unknown);
     public int OfflineCount => _rows.Count(r => r.Device.State == DeviceState.Offline);
     public bool IsEmpty => Devices.Count == 0;
     public bool HasDiscoveryResults => _snapshot.LastCompletedAt is not null && SelectedNetwork is { } n && _snapshot.Network?.HasSameContext(n) == true && MatchesSession(_snapshot);
+    public bool CanOpenAudit => HasDiscoveryResults && !_snapshot.IsDiscovering && _snapshot.Error is null &&
+        _snapshot.CompletedRunId != Guid.Empty && _snapshot.CompletedRunId == _snapshot.RunId &&
+        (_snapshot.Progress is null or { Stage: DeviceDiscoveryStage.Completed }) && !IsLoading;
     public bool HasDeviceStatistics => KnownCount > 0 || HasDiscoveryResults;
     public string EmptyText => KnownCount > 0 ? "Нет устройств, соответствующих фильтрам." :
         IsBusy ? "Поиск устройств…" : HasDiscoveryResults ? "Поиск завершён. Устройства не найдены." : "Выберите интерфейс и нажмите «Сканировать».";
@@ -104,7 +107,7 @@ public sealed partial class DevicesViewModel : ViewModelBase
     [ObservableProperty] private bool _hasProgress;
     [ObservableProperty] private double _progressPercent;
     [ObservableProperty] private string _progressText = string.Empty;
-    partial void OnIsLoadingChanged(bool value) => OnPropertyChanged(nameof(ReadinessText));
+    partial void OnIsLoadingChanged(bool value) { OnPropertyChanged(nameof(ReadinessText)); OnPropertyChanged(nameof(CanOpenAudit)); }
     partial void OnIsMonitoringChanged(bool value) => OnPropertyChanged(nameof(ReadinessText));
 
     public Task InitializeAsync() => RefreshInterfacesCommand.ExecuteAsync(null);
@@ -296,6 +299,7 @@ public sealed partial class DevicesViewModel : ViewModelBase
             _rows.Clear(); _rows.AddRange(target); _shownDevices = _snapshot.Devices;
             ApplyFilter(); NotifyCounts();
         }
+        OnPropertyChanged(nameof(CanOpenAudit));
         LastScanText = _snapshot.LastCompletedAt is { } completed ? $"Последний поиск: {completed.ToLocalTime():dd.MM HH:mm:ss}" : "Поиск ещё не выполнялся";
         HasProgress = _snapshot.Progress is not null;
         if (_snapshot.Progress is { } p)
@@ -340,7 +344,7 @@ public sealed partial class DevicesViewModel : ViewModelBase
 
     private void NotifyCounts()
     {
-        foreach (var name in new[] { nameof(KnownCount), nameof(OnlineCount), nameof(UnknownCount), nameof(OfflineCount), nameof(IsEmpty), nameof(EmptyText), nameof(HasDiscoveryResults), nameof(HasDeviceStatistics), nameof(NetworkSummary), nameof(ReadinessText) }) OnPropertyChanged(name);
+        foreach (var name in new[] { nameof(KnownCount), nameof(OnlineCount), nameof(UnknownCount), nameof(OfflineCount), nameof(IsEmpty), nameof(EmptyText), nameof(HasDiscoveryResults), nameof(CanOpenAudit), nameof(HasDeviceStatistics), nameof(NetworkSummary), nameof(ReadinessText) }) OnPropertyChanged(name);
         RefreshNamesCommand.NotifyCanExecuteChanged();
     }
     private bool MatchesSession(DeviceMonitorSnapshot snapshot) => _session is null || snapshot.SessionId == Guid.Empty || snapshot.SessionId == _session.Current.SessionId;

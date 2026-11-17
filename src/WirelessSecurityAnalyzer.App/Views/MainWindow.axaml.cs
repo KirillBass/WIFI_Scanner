@@ -1,5 +1,4 @@
 using Avalonia.Controls;
-using Avalonia.Threading;
 using Serilog;
 using WirelessSecurityAnalyzer.App.ViewModels;
 using WirelessSecurityAnalyzer.Core.Models;
@@ -54,8 +53,6 @@ public partial class MainWindow : Window
             var result = await dialog.ShowDialog<WifiConnectionResult?>(this);
             Log.Information("Wi-Fi dialog completed: success {Success}, state {State}, failure {Failure}",
                 result?.Success, result?.State, result?.Failure);
-            if (result is { Success: true, State: WifiConnectionState.Ready } && DataContext is MainWindowViewModel main)
-                await Dispatcher.UIThread.InvokeAsync(main.OpenNetworkAudit, DispatcherPriority.Background);
         }
         catch (Exception exception)
         {

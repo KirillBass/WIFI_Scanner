@@ -9,7 +9,7 @@ namespace WirelessSecurityAnalyzer.App.Views;
 
 public partial class ChannelsView : PlotViewBase
 {
-    private const string HoverHint = "Наведите курсор на кривую, чтобы увидеть SSID, BSSID, канал и RSSI.";
+    private const string HoverHint = "Наведите курсор на кривую, чтобы увидеть SSID, MAC-адрес, канал и RSSI.";
     private ChannelAnalysisSnapshot? _renderedAnalysis;
     private readonly List<(ScottPlot.Plottables.Scatter Series, ChannelSpectrumCurve Curve)> _series = [];
     private bool _hasRendered;

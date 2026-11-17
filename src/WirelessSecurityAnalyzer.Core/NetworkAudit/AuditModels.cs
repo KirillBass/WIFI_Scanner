@@ -24,6 +24,7 @@ public sealed record AuditRow(Guid SessionId, AuditTarget Target, int Port, Serv
 {
     public Guid AuditId { get; init; }
     public IReadOnlyList<HttpSiteResult> HttpSites { get; init; } = [];
+    public bool HasFoundSite => HttpSites.Any(s => s.IsFound);
     public string SiteSummary => HttpSites.Count > 0 ? string.Join("; ", HttpSites.Select(s => s.Summary)) : "Проверка не проводилась";
     public string Address => Target.Address.ToString();
     public string Name => Target.Name;

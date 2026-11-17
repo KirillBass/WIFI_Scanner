@@ -36,7 +36,7 @@ public sealed partial class SignalViewModel : WifiViewModelBase
     }
 
     public ObservableCollection<AccessPointRowViewModel> AccessPoints { get; } = [];
-    public IReadOnlyList<int> IntervalOptions { get; } = [5, 10, 15, 30, 60];
+    public IReadOnlyList<int> IntervalOptions { get; } = [1, 5, 10, 15, 30, 60];
     [ObservableProperty] private int _selectedIntervalSeconds = 5;
     [ObservableProperty] private bool _isMonitoring;
     [ObservableProperty] private bool _isStopping;
@@ -66,12 +66,12 @@ public sealed partial class SignalViewModel : WifiViewModelBase
     public SignalStatistics Statistics => _snapshot?.Statistics ?? SignalStatistics.Empty;
     public int SampleCount => Statistics.SampleCount;
     public bool HasSamples => SampleCount > 0;
-    public string CurrentRssiText => _snapshot?.IsPresentInLastScan == false ? "-" : FormatRssi(Statistics.CurrentRssiDbm);
+    public string CurrentRssiText => _snapshot is { IsPresentInLastScan: false } or { IsMeasurementStale: true } ? "-" : FormatRssi(Statistics.CurrentRssiDbm);
     public string AverageRssiText => Statistics.AverageRssiDbm is { } value ? value.ToString("0.0", Russian) + " dBm" : "-";
     public string MinimumRssiText => FormatRssi(Statistics.MinimumRssiDbm);
     public string MaximumRssiText => FormatRssi(Statistics.MaximumRssiDbm);
     public string LastSeenText => Statistics.LastSeen?.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss", Russian) ?? "Измерений ещё нет";
-    public string SignalQualityText => _snapshot?.IsPresentInLastScan == false ? "Не обнаружена" : Statistics.CurrentRssiDbm switch
+    public string SignalQualityText => _snapshot?.IsMeasurementStale == true ? "Нет нового измерения" : _snapshot?.IsPresentInLastScan == false ? "Не обнаружена" : Statistics.CurrentRssiDbm switch
     {
         null => "Нет измерений", >= -50 => "Отличный", >= -60 => "Хороший", >= -70 => "Средний",
         >= -80 => "Слабый", _ => "Очень слабый"
@@ -178,6 +178,7 @@ public sealed partial class SignalViewModel : WifiViewModelBase
             ? AccessPoints.Count == 0 ? "Сначала выполните сканирование Wi-Fi эфира." : "Выберите точку доступа для мониторинга."
             : HasError ? IsMonitoring ? "Ошибка сканирования. Мониторинг продолжится со следующей попытки." : "Мониторинг остановлен из-за ошибки."
             : _snapshot?.IsPresentInLastScan == false ? "Точка доступа не обнаружена в последнем сканировании. История сохранена."
+            : _snapshot?.IsMeasurementStale == true ? "Нового измерения нет: драйвер вернул прежние данные. История сохранена."
             : IsMonitoring ? "Мониторинг активен" : "Мониторинг остановлен. Можно начать или продолжить измерения.";
         foreach (var name in new[] { nameof(HasAccessPoints), nameof(SelectedSsid), nameof(SelectedBssid), nameof(SelectedChannel), nameof(SelectedBand),
             nameof(Samples), nameof(Statistics), nameof(SampleCount), nameof(HasSamples), nameof(CurrentRssiText), nameof(AverageRssiText),

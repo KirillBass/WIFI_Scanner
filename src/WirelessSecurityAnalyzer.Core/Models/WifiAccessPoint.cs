@@ -17,4 +17,6 @@ public sealed record WifiAccessPoint(
     public WifiSecurityInfo Security { get; init; } = WifiSecurityInfo.Unknown;
     public bool IsSecurityEnabled { get; init; }
     public IReadOnlyList<byte>? SsidBytes { get; init; }
+    /// <summary>Measurement time reported by the source, when available; distinguishes cached BSS data.</summary>
+    public DateTimeOffset? MeasurementTimestamp { get; init; }
 }

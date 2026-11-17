@@ -67,7 +67,7 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
         $"В диапазоне {SelectedBandText} точки доступа не обнаружены.";
     public bool HasDataNotes => Analysis is { IgnoredBssCount: > 0 } or { DuplicateBssCount: > 0 } or { InvalidCandidateCount: > 0 };
     public string DataNotesText => Analysis is { } a
-        ? $"Пропущено некорректных BSS: {a.IgnoredBssCount}; объединено дубликатов BSSID: {a.DuplicateBssCount}; недопустимых кандидатов: {a.InvalidCandidateCount}."
+        ? $"Пропущено некорректных BSS: {a.IgnoredBssCount}; объединено дубликатов MAC-адресов: {a.DuplicateBssCount}; недопустимых кандидатов: {a.InvalidCandidateCount}."
         : string.Empty;
 
     partial void OnSelectedBandIndexChanged(int value)

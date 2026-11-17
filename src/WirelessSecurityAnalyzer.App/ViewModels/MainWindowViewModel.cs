@@ -4,7 +4,17 @@ using WirelessSecurityAnalyzer.Core.Interfaces;
 
 namespace WirelessSecurityAnalyzer.App.ViewModels;
 
-public sealed record NavigationItem(string Title, ViewModelBase Page);
+public sealed class NavigationItem(string title, ViewModelBase page) : ViewModelBase
+{
+    public string Title { get; } = title;
+    public ViewModelBase Page { get; } = page;
+    private bool _isAvailable = true;
+    private string _unavailableReason = "";
+    public bool IsAvailable { get => _isAvailable; private set => SetProperty(ref _isAvailable, value); }
+    public string UnavailableReason { get => _unavailableReason; private set => SetProperty(ref _unavailableReason, value); }
+    public void SetAvailability(bool available, string reason)
+    { IsAvailable = available; UnavailableReason = available ? "" : reason; }
+}
 
 public sealed partial class MainWindowViewModel : ViewModelBase
 {
@@ -15,6 +25,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly IWifiConnectionService? _connections;
     private readonly NetworkAuditViewModel? _audit;
     private readonly NavigationItem _defaultNavigation;
+    private NavigationItem? _lastAvailableNavigation;
+    private Guid _wifiSessionId;
+    private long _wifiSnapshotFloor;
     public AccessPointsViewModel AccessPoints => _accessPoints;
     public NetworkSessionViewModel? Session { get; }
     public MainWindowViewModel(AccessPointsViewModel accessPoints,
@@ -31,9 +44,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         if (audit is not null) navigation.Add(new("Сетевой аудит", audit));
         navigation.Add(new("Настройки", settings));
         Navigation = navigation.AsReadOnly();
-        _defaultNavigation = Navigation.FirstOrDefault(n => n.Title == settings.StartupPage) ?? Navigation.FirstOrDefault(n => n.Page == audit) ?? Navigation[0];
+        _wifiSessionId = Session?.Current.SessionId ?? Guid.Empty;
+        UpdateAvailability();
+        _defaultNavigation = Navigation.FirstOrDefault(n => n.Title == settings.StartupPage && n.IsAvailable) ?? DeviceNavigation;
+        _lastAvailableNavigation = _defaultNavigation;
         _selectedNavigation = _defaultNavigation;
-        if (audit is not null) { audit.NavigationRequested += Navigate; audit.PropertyChanged += OnActivityChanged; }
+        if (audit is not null) audit.PropertyChanged += OnActivityChanged;
         devices.PropertyChanged += OnActivityChanged;
         accessPoints.PropertyChanged += OnActivityChanged;
         signal.PropertyChanged += OnActivityChanged;
@@ -51,19 +67,48 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void Navigate(string page)
     {
-        if (Navigation.FirstOrDefault(n => n.Title == page) is { } target) SelectedNavigation = target;
+        if (Navigation.FirstOrDefault(n => n.Title == page && n.IsAvailable) is { } target) SelectedNavigation = target;
     }
-    private void OnActivityChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => OnPropertyChanged(nameof(ActivitySummary));
+    private NavigationItem DeviceNavigation => Navigation.First(n => ReferenceEquals(n.Page, _devices));
+    private void UpdateAvailability()
+    {
+        var freshWifi = _accessPoints.SnapshotVersion > _wifiSnapshotFloor;
+        foreach (var item in Navigation)
+            switch (item.Title)
+            {
+                case "Каналы": item.SetAvailability(freshWifi && _accessPoints.HasGraphData,
+                    "Сначала выполните сканирование Wi-Fi во вкладке «Эфир»."); break;
+                case "Сигнал": item.SetAvailability(freshWifi && _signal.HasAccessPoints,
+                    "Сначала найдите точки доступа во вкладке «Эфир»."); break;
+                case "Сетевой аудит": item.SetAvailability(Session?.IsReady == true && _devices.CanOpenAudit,
+                    "Сначала выберите интерфейс и выполните поиск устройств во вкладке «Устройства»."); break;
+            }
+    }
+    private void OnActivityChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (Session is not null && Session.Current.SessionId != _wifiSessionId)
+        {
+            _wifiSessionId = Session.Current.SessionId;
+            _wifiSnapshotFloor = _accessPoints.SnapshotVersion;
+        }
+        UpdateAvailability();
+        if (SelectedNavigation is { IsAvailable: false }) SelectedNavigation = DeviceNavigation;
+        OnPropertyChanged(nameof(ActivitySummary));
+    }
     public void OpenNetworkAudit()
     {
         Session?.Refresh();
-        if (_audit is not null) SelectedNavigation = Navigation.First(n => ReferenceEquals(n.Page, _audit));
+        if (_audit is not null && Navigation.First(n => ReferenceEquals(n.Page, _audit)) is { IsAvailable: true } target) SelectedNavigation = target;
     }
 
     partial void OnSelectedNavigationChanged(NavigationItem? value)
     {
-        // Keep the default page selected when the tab strip receives an empty selection.
-        if (value is null) SelectedNavigation = _defaultNavigation;
+        if (value is null || !value.IsAvailable)
+        {
+            SelectedNavigation = _lastAvailableNavigation is { IsAvailable: true } previous ? previous : DeviceNavigation;
+            return;
+        }
+        _lastAvailableNavigation = value;
     }
 
     [RelayCommand]
@@ -77,7 +122,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _devices.PropertyChanged -= OnActivityChanged; _accessPoints.PropertyChanged -= OnActivityChanged;
         _signal.PropertyChanged -= OnActivityChanged;
         if (Session is not null) Session.PropertyChanged -= OnActivityChanged;
-        if (_audit is not null) { _audit.NavigationRequested -= Navigate; _audit.PropertyChanged -= OnActivityChanged; }
+        if (_audit is not null) _audit.PropertyChanged -= OnActivityChanged;
         _accessPoints.Stop();
         _signal.Stop();
         _channels.Stop();

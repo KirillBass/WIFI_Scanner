@@ -5,6 +5,8 @@ namespace WirelessSecurityAnalyzer.Core.NetworkAudit;
 
 public enum HttpSiteState { NotChecked, Checking, HttpConfirmed, SiteFound, AccessRestricted, StartPageNotFound, ConnectionError }
 public sealed record HttpPage(Uri Url, int StatusCode, string Title, string Source);
+/// <summary>Redacted diagnostics captured from an actual HTTP request and its response.</summary>
+public sealed record HttpExchange(string Request, string Response);
 public sealed record HttpSiteResult(Guid SessionId, Guid AuditId, IPAddress Address, int Port, Uri Origin,
     string AssumedProtocol, string OriginalService, string DiscoverySource)
 {
@@ -17,6 +19,8 @@ public sealed record HttpSiteResult(Guid SessionId, Guid AuditId, IPAddress Addr
     public string Evidence { get; init; } = "";
     public bool HttpConfirmed { get; init; }
     public bool IsPartial { get; init; }
+    public HttpExchange? Exchange { get; init; }
+    public bool IsFound => HttpConfirmed && State == HttpSiteState.SiteFound && Pages.Any(p => p.StatusCode is >= 200 and < 300);
     public int RequestsChecked { get; init; }
     public IReadOnlyList<HttpPage> Pages { get; init; } = [];
     public IReadOnlyList<string> ExternalLinks { get; init; } = [];
@@ -29,7 +33,10 @@ public sealed record HttpSiteResult(Guid SessionId, Guid AuditId, IPAddress Addr
         _ => "Проверка не проводилась"
     };
     public string Url => (StartUrl ?? Origin).AbsoluteUri;
-    public string Summary => $"{StateText} · {Url} · страниц: {Pages.Count}";
+    public static string RedactAddress(Uri url) => new UriBuilder(url) { UserName = "", Password = "", Query = "", Fragment = "" }
+        .Uri.GetLeftPart(UriPartial.Path) + (url.Query.Length > 0 ? "?[параметры скрыты]" : "");
+    public string DisplayUrl => RedactAddress(StartUrl ?? Origin);
+    public string Summary => $"{StateText} · {DisplayUrl} · страниц: {Pages.Count}";
     public string Details => $"{StateText}{(IsPartial ? " · результат неполный" : "")}\n{Url}\nHTTP стартовой страницы: {StatusCode?.ToString() ?? "не запрашивалась / ответ не получен"} · {ContentType}\n{Title}\n{Message}\n{Evidence}\nЗапросов: {RequestsChecked}; HTML-страниц: {Pages.Count}\nИсточник: {DiscoverySource}; исходная служба: {OriginalService}\n" +
         (ExternalLinks.Count == 0 ? "" : "Ссылки за пределами обхода (не запрашивались):\n" + string.Join("\n", ExternalLinks));
 }

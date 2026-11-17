@@ -111,7 +111,8 @@ public sealed class HttpSiteDiscovery : IHttpSiteDiscovery, IDisposable
     public void Dispose() => _candidates.Dispose();
 
     private sealed record Reply(Uri Url, int? Code = null, string ContentType = "", string Charset = "", string Server = "",
-        byte[]? Body = null, Uri? Redirect = null, string Problem = "", bool Limited = false, Uri? External = null, bool Blocked = false)
+        byte[]? Body = null, Uri? Redirect = null, string Problem = "", bool Limited = false, Uri? External = null, bool Blocked = false,
+        HttpExchange? Exchange = null)
     {
         public bool IsHtml => ContentType is "text/html" or "application/xhtml+xml";
     }
@@ -139,6 +140,7 @@ public sealed class HttpSiteDiscovery : IHttpSiteDiscovery, IDisposable
             }
             void Observe(Reply reply)
             {
+                if (reply.Exchange is not null) site = site with { Exchange = reply.Exchange };
                 if (reply.External is not null && external.Count < 30) external.Add(reply.External.AbsoluteUri);
                 if (reply.Problem.Length > 0) notes.Add(reply.Problem);
                 partial |= reply.Limited || reply.Problem.Length > 0 && !reply.Blocked;
@@ -219,21 +221,22 @@ public sealed class HttpSiteDiscovery : IHttpSiteDiscovery, IDisposable
         }
         private async Task<Reply> FetchAsync(Uri start, bool confirmNames, CancellationToken token)
         {
-            var url = start; var visited = new HashSet<string>(); int? lastCode = null;
+            var url = start; var visited = new HashSet<string>(); int? lastCode = null; HttpExchange? lastExchange = null;
             for (var hops = 0; ; hops++)
             {
                 token.ThrowIfCancellationRequested();
                 if (!await scope.AllowAsync(url, confirmNames, token).ConfigureAwait(false) ||
                     !confirmNames && !HttpSiteScope.SameOrigin(start, url))
-                    return new(start, lastCode, Problem: "Переход за пределы разрешённого HTTP-источника не выполнен.", External: url);
+                    return new(start, lastCode, Problem: "Переход за пределы разрешённого HTTP-источника не выполнен.", External: url, Exchange: lastExchange);
                 if (!HttpSiteScope.IsPageLink(url)) return new(start, lastCode, Problem: "Ссылка на файл или действие пропущена.", Blocked: true);
-                if (!visited.Add(url.AbsoluteUri)) return new(url, lastCode, Problem: "Обнаружен цикл перенаправлений.", Limited: true);
+                if (!visited.Add(url.AbsoluteUri)) return new(url, lastCode, Problem: "Обнаружен цикл перенаправлений.", Limited: true, Exchange: lastExchange);
                 var rules = await _robots.GetOrAdd(HttpSiteScope.Origin(url).AbsoluteUri, _ => new Lazy<Task<(HttpRobotsRules Rules, string Problem)>>(
                     () => ReadRobotsAsync(HttpSiteScope.Origin(url), token))).Value.ConfigureAwait(false);
                 if (!rules.Rules.Allows(url)) return new(url, lastCode, Problem: rules.Problem.Length > 0 ? rules.Problem : "Обход URL запрещён robots.txt.",
                     Limited: true, Blocked: rules.Problem.Length == 0);
                 if (!_visited.TryAdd(url.AbsoluteUri, 0)) return new(url, lastCode, Problem: "Повторный запрос URL пропущен.");
                 var reply = await SendAsync(url, false, token).ConfigureAwait(false);
+                lastExchange = reply.Exchange;
                 if (reply.Redirect is null) return reply;
                 lastCode = reply.Code;
                 if (hops >= options.MaxRedirects) return reply with { Problem = "Достигнут предел перенаправлений.", Limited = true };
@@ -268,12 +271,14 @@ public sealed class HttpSiteDiscovery : IHttpSiteDiscovery, IDisposable
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.UserAgent.ParseAdd("WirelessSecurityAnalyzer/" + typeof(HttpSiteDiscovery).Assembly.GetName().Version?.Major);
                 request.Headers.Accept.ParseAdd(robots ? "text/plain" : "text/html, application/xhtml+xml");
+                reply = reply with { Exchange = new(DescribeRequest(request), "") };
                 Interlocked.Increment(ref _totalRequests);
                 using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
                 var code = (int)response.StatusCode;
-                if (code is < 100 or > 599) return new(url, Problem: "Некорректный код HTTP-ответа.");
+                if (code is < 100 or > 599) return reply with { Problem = "Некорректный код HTTP-ответа." };
                 reply = reply with { Code = code, ContentType = response.Content.Headers.ContentType?.MediaType?.ToLowerInvariant() ?? "",
-                    Charset = response.Content.Headers.ContentType?.CharSet?.Trim('"', '\'') ?? "", Server = ProbeIo.Clean(response.Headers.Server.ToString(), 256) };
+                    Charset = response.Content.Headers.ContentType?.CharSet?.Trim('"', '\'') ?? "", Server = ProbeIo.Clean(response.Headers.Server.ToString(), 256),
+                    Exchange = new(reply.Exchange!.Request, DescribeResponse(response)) };
                 _httpEvidence = $"GET {url.AbsoluteUri}: HTTP {code}.";
                 if (reply.Server.Length > 0) _server = reply.Server;
                 if (code is 301 or 302 or 303 or 307 or 308)
@@ -305,6 +310,24 @@ public sealed class HttpSiteDiscovery : IHttpSiteDiscovery, IDisposable
             catch (Exception ex) when (ex is HttpRequestException or IOException or SocketException)
             { return reply with { Problem = "Ошибка HTTP-соединения: " + ex.GetType().Name + "." }; }
         }
+        private static string DescribeRequest(HttpRequestMessage request) =>
+            $"{request.Method.Method} {SafeAddress(request.RequestUri!)}\n" +
+            string.Join("\n", request.Headers.Where(h => h.Key is "User-Agent" or "Accept")
+                .Select(h => h.Key + ": " + ProbeIo.Clean(string.Join(", ", h.Value), 512)));
+
+        private static string DescribeResponse(HttpResponseMessage response)
+        {
+            // A whitelist excludes authentication challenges, cookies and arbitrary secret-bearing headers.
+            var headers = response.Headers.Concat(response.Content.Headers)
+                .Where(h => h.Key.Equals("Server", StringComparison.OrdinalIgnoreCase) ||
+                    h.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase) ||
+                    h.Key.Equals("Content-Length", StringComparison.OrdinalIgnoreCase) ||
+                    h.Key.Equals("Date", StringComparison.OrdinalIgnoreCase) || h.Key.Equals("Allow", StringComparison.OrdinalIgnoreCase))
+                .Select(h => h.Key + ": " + ProbeIo.Clean(string.Join(", ", h.Value), 512));
+            return $"HTTP/{response.Version} {(int)response.StatusCode}\n" + string.Join("\n", headers);
+        }
+        private static string SafeAddress(Uri url) => HttpSiteResult.RedactAddress(url);
+
         private static string Decode(byte[] bytes, string charset)
         {
             Encoding encoding = Encoding.UTF8;

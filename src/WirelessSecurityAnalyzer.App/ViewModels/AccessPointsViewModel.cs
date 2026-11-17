@@ -41,8 +41,11 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
     }
 
     public ObservableCollection<AccessPointRowViewModel> AccessPoints { get; } = [];
-    public IReadOnlyList<string> BandFilters { get; } = ["Все диапазоны", "2,4 ГГц", "5 ГГц", "6 ГГц"];
-    public int TotalCount => _rows.Count;
+    public IReadOnlyList<string> BandFilters { get; } = ["Все диапазоны", "2,4 ГГц", "5 ГГц"];
+    public int TotalCount => _rows.Values.Count(r => r.AccessPoint.Band is WifiBand.Ghz2_4 or WifiBand.Ghz5);
+    public long SnapshotVersion => _snapshotVersion;
+    public bool HasGraphData => _scanState.Current?.AccessPoints.Any(ap => WirelessSecurityAnalyzer.Core.Analysis.WifiChannelHelper.FromFrequency(ap.FrequencyMhz).Band != WifiBand.Unknown) == true;
+    public string AccessPointCountText => $"Обнаружено точек доступа: {TotalCount}";
     public int Ghz24Count => _rows.Values.Count(r => r.AccessPoint.Band == WifiBand.Ghz2_4);
     public int Ghz5Count => _rows.Values.Count(r => r.AccessPoint.Band == WifiBand.Ghz5);
     public int Ghz6Count => _rows.Values.Count(r => r.AccessPoint.Band == WifiBand.Ghz6);
@@ -53,7 +56,7 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowScanStatus))] private bool _hasScanAttempt;
     public bool AreResultsPrevious => HasSnapshot && (IsBusy || _lastAttemptFailed);
     public string ResultCaption => !HasSnapshot ? "Сканирование ещё не выполнялось" :
-        $"{(AreResultsPrevious ? "Предыдущий снимок" : "Последний снимок")}: {TotalCount} точек доступа (BSS)";
+        AreResultsPrevious ? "Показан предыдущий снимок" : "Последний снимок";
     public string EmptyText => IsBusy ? "Сканирование эфира…" : !HasSnapshot ? "Нажмите «Сканировать», чтобы найти сети Wi-Fi." :
         SearchText.Length > 0 || SelectedBandIndex != 0 ? "Нет сетей, соответствующих фильтрам." : "Сканирование завершено. Точки доступа не найдены.";
     [ObservableProperty] private bool _hasAdapter;
@@ -199,9 +202,9 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
         if (snapshot.Version <= _snapshotVersion) return;
         _snapshotVersion = snapshot.Version;
         _lastAttemptFailed = false;
-        var seen = snapshot.AccessPoints.Select(ap => ap.Bssid).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var seen = snapshot.AccessPoints.Where(ap => ap.Band is WifiBand.Ghz2_4 or WifiBand.Ghz5).Select(ap => ap.Bssid).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var bssid in _rows.Keys.Where(key => !seen.Contains(key)).ToArray()) _rows.Remove(bssid);
-        foreach (var ap in snapshot.AccessPoints)
+        foreach (var ap in snapshot.AccessPoints.Where(ap => ap.Band is WifiBand.Ghz2_4 or WifiBand.Ghz5))
         {
             if (_rows.TryGetValue(ap.Bssid, out var row)) row.Update(ap);
             else _rows.Add(ap.Bssid, new AccessPointRowViewModel(ap));
@@ -213,13 +216,13 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
         OnPropertyChanged(nameof(Ghz6Count));
         SetError(null);
         LastScanText = $"Последнее сканирование: {snapshot.CompletedAt.ToLocalTime():HH:mm:ss}";
-        StatusText = TotalCount == 0 ? "Сканирование завершено. Точки доступа не обнаружены." : $"Обнаружено BSS: {TotalCount}";
+        StatusText = TotalCount == 0 ? "Сканирование завершено. Точки доступа не обнаружены." : "Сканирование завершено.";
         NotifyScanPresentation();
     }
 
     private void ApplyFilter()
     {
-        var band = SelectedBandIndex switch { 1 => WifiBand.Ghz2_4, 2 => WifiBand.Ghz5, 3 => WifiBand.Ghz6, _ => (WifiBand?)null };
+        var band = SelectedBandIndex switch { 1 => WifiBand.Ghz2_4, 2 => WifiBand.Ghz5, _ => (WifiBand?)null };
         var query = SearchText.Trim();
         var filtered = _rows.Values.Where(r => (band is null || r.AccessPoint.Band == band) &&
             (query.Length == 0 || r.Ssid.Contains(query, StringComparison.OrdinalIgnoreCase) || r.Bssid.Contains(query, StringComparison.OrdinalIgnoreCase)));
@@ -233,7 +236,7 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
 
     private void NotifyScanPresentation()
     {
-        foreach (var name in new[] { nameof(HasSnapshot), nameof(ShowScanStatus), nameof(AreResultsPrevious), nameof(ResultCaption), nameof(EmptyText) }) OnPropertyChanged(name);
+        foreach (var name in new[] { nameof(HasSnapshot), nameof(ShowScanStatus), nameof(AreResultsPrevious), nameof(ResultCaption), nameof(AccessPointCountText), nameof(SnapshotVersion), nameof(HasGraphData), nameof(EmptyText) }) OnPropertyChanged(name);
     }
 
     private static string FormatAdapterState(WifiAdapterState state) => state switch

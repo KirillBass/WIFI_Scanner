@@ -11,11 +11,7 @@
         </Grid>
         <CheckBox Content="Запоминать выбранный сетевой интерфейс" IsChecked="{Binding RememberInterface}" ToolTip.Tip="При следующем запуске выбирается сохранённый активный интерфейс. Если он недоступен, используется первый доступный. Поиск сам не запускается." />
         <TextBlock Text="Сканирование" Classes="section" Margin="0,4,0,0" />
-        <Grid ColumnDefinitions="260,*" ColumnSpacing="12">
-          <TextBlock Text="Профиль портов по умолчанию:" VerticalAlignment="Center" />
-          <ComboBox Grid.Column="1" ItemsSource="{Binding PortProfiles}" SelectedIndex="{Binding DefaultPortProfile, Mode=TwoWay}" HorizontalAlignment="Stretch" />
-        </Grid>
-        <CheckBox Content="Включать собственный ПК в аудит по умолчанию" IsChecked="{Binding IncludeLocal}" ToolTip.Tip="Проверять службы своего ПК на его IPv4-адресе выбранной сети. Только после явного запуска аудита." />
+        <CheckBox Content="Включать свой ПК в полном и пользовательском профилях" IsChecked="{Binding IncludeLocal}" ToolTip.Tip="Значение для полного и пользовательского профилей при запуске программы. Быстрый и стандартный профили всегда включают свой ПК. Проверки запускаются вручную." />
         <TextBlock Text="Отображение" Classes="section" Margin="0,4,0,0" />
         <CheckBox Content="Компактные строки таблиц" IsChecked="{Binding CompactRows}" ToolTip.Tip="Уменьшить высоту строк во всех таблицах. Применяется после сохранения настроек." />
         <TextBlock Text="Журналы" Classes="section" Margin="0,4,0,0" />

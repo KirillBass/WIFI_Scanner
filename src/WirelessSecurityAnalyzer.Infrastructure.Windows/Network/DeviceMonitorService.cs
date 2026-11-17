@@ -51,7 +51,7 @@ public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILog
         CancellationToken cancellationToken = default)
     {
         var period = interval ?? TimeSpan.FromSeconds(30);
-        if (period < TimeSpan.FromSeconds(10) || period > TimeSpan.FromSeconds(120)) throw new ArgumentOutOfRangeException(nameof(interval));
+        if (period < TimeSpan.FromSeconds(1) || period > TimeSpan.FromSeconds(120)) throw new ArgumentOutOfRangeException(nameof(interval));
         await _lifecycle.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -106,7 +106,7 @@ public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILog
         Change(s => s with { Network = network, IsMonitoring = monitoring, IsDiscovering = true,
             Interval = interval, Progress = null, Error = null, Warning = null,
             Devices = changed ? Array.AsReadOnly(Array.Empty<NetworkDevice>()) : s.Devices,
-            LastCompletedAt = changed ? null : s.LastCompletedAt, RunId = Guid.NewGuid(), SessionId = session?.SessionId ?? Guid.Empty });
+            LastCompletedAt = changed ? null : s.LastCompletedAt, RunId = Guid.NewGuid(), CompletedRunId = Guid.Empty, SessionId = session?.SessionId ?? Guid.Empty });
         if (sessions is not null && sessions.Current.SessionId != (session?.SessionId ?? Guid.Empty))
         {
             OnSessionChanged(sessions, sessions.Current);
@@ -133,7 +133,7 @@ public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILog
                 cancellationToken.ThrowIfCancellationRequested();
                 var runId = Guid.NewGuid();
                 var sessionId = Current.SessionId;
-                Change(s => s with { IsDiscovering = true, Progress = null, Error = null, RunId = runId });
+                Change(s => s with { IsDiscovering = true, Progress = null, Error = null, RunId = runId, CompletedRunId = Guid.Empty });
                 try
                 {
                     if (discovery is IStreamingDeviceDiscoveryService streaming)
@@ -149,7 +149,8 @@ public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILog
                         finally { _identitySignal?.Writer.TryComplete(); }
                         ChangeScoped(runId, sessionId, s => s with { IsDiscovering = false,
                             Progress = result.Progress, Warning = result.Warning, Error = null,
-                            LastCompletedAt = result.IsCancelled ? s.LastCompletedAt : result.CompletedAt });
+                            LastCompletedAt = result.IsCancelled ? s.LastCompletedAt : result.CompletedAt,
+                            CompletedRunId = result.Progress is { Stage: not DeviceDiscoveryStage.Completed } || cancellationToken.IsCancellationRequested ? Guid.Empty : runId });
                         if (result.IsCancelled) break;
                     }
                     else
@@ -158,7 +159,8 @@ public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILog
                             new InlineProgress(p => Change(s => s with { Progress = p }))).ConfigureAwait(false);
                         cancellationToken.ThrowIfCancellationRequested();
                         Change(s => s with { Devices = _tracker.Apply(result, options.OfflineAfterMissedScans),
-                            IsDiscovering = false, LastCompletedAt = result.CompletedAt, Warning = result.Warning, Error = null });
+                            IsDiscovering = false, LastCompletedAt = result.CompletedAt, Warning = result.Warning, Error = null,
+                            CompletedRunId = result.Progress is { Stage: not DeviceDiscoveryStage.Completed } ? Guid.Empty : runId });
                         // The discovery snapshot is already published. Name lookups run independently
                         // of the scan/delay loop, and are replaced only at a completed discovery cycle.
                         if (identityResolver is not null)
@@ -349,7 +351,7 @@ public sealed class DeviceMonitorService(IDeviceDiscoveryService discovery, ILog
         Change(s =>
         {
             _tracker.Clear();
-            return s with { RunId = Guid.NewGuid(), SessionId = session.SessionId, Network = null, Devices = _tracker.Snapshot(),
+            return s with { RunId = Guid.NewGuid(), CompletedRunId = Guid.Empty, SessionId = session.SessionId, Network = null, Devices = _tracker.Snapshot(),
                 Progress = null, LastCompletedAt = null, Error = null, Warning = null, IsDiscovering = false,
                 IsMonitoring = false, IsResolvingIdentities = false };
         });

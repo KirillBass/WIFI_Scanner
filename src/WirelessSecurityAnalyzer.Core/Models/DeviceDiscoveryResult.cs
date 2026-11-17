@@ -47,5 +47,7 @@ public sealed record DeviceMonitorSnapshot(long Version, LocalNetworkInfo? Netwo
 {
     public bool IsResolvingIdentities { get; init; }
     public Guid RunId { get; init; }
+    /// <summary>Successful completion of this exact run, including an empty result.</summary>
+    public Guid CompletedRunId { get; init; }
     public Guid SessionId { get; init; }
 }

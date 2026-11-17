@@ -40,8 +40,8 @@ public sealed class WifiMonitorService : IWifiMonitorService, IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(bssid);
         var period = interval ?? TimeSpan.FromSeconds(5);
-        if (period < TimeSpan.FromSeconds(5) || period > TimeSpan.FromSeconds(60))
-            throw new ArgumentOutOfRangeException(nameof(interval), "Monitoring interval must be 5–60 seconds.");
+        if (period < TimeSpan.FromSeconds(1) || period > TimeSpan.FromSeconds(60))
+            throw new ArgumentOutOfRangeException(nameof(interval), "Monitoring interval must be 1-60 seconds.");
         await _lifecycle.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -112,6 +112,7 @@ public sealed class WifiMonitorService : IWifiMonitorService, IDisposable
                 token.ThrowIfCancellationRequested();
                 try
                 {
+                    var scanStartedAt = _clock.GetUtcNow();
                     var results = await _scanner.ScanAsync(token).ConfigureAwait(false);
                     token.ThrowIfCancellationRequested();
                     var accessPoint = results.FirstOrDefault(ap => string.Equals(ap.Bssid, bssid, StringComparison.OrdinalIgnoreCase));
@@ -123,8 +124,13 @@ public sealed class WifiMonitorService : IWifiMonitorService, IDisposable
                         wasPresent = history.IsPresent;
                         history.IsPresent = accessPoint is not null;
                         history.Error = null;
-                        if (accessPoint is not null)
+                        history.IsMeasurementStale = accessPoint?.MeasurementTimestamp is { } stamp &&
+                            (stamp < scanStartedAt || history.LastMeasurementTimestamp is { } last && stamp <= last);
+                        if (accessPoint is not null && !history.IsMeasurementStale)
+                        {
                             history.History.Add(new SignalSample(_clock.GetUtcNow(), accessPoint.RssiDbm));
+                            history.LastMeasurementTimestamp = accessPoint.MeasurementTimestamp;
+                        }
                         snapshot = ChangedSnapshotLocked(bssid);
                     }
                     if (accessPoint is null && wasPresent != false)
@@ -200,7 +206,8 @@ public sealed class WifiMonitorService : IWifiMonitorService, IDisposable
         var tracked = bssid is not null && _histories.TryGetValue(bssid, out var history) ? history : null;
         var samples = tracked?.History.GetSamples() ?? Array.AsReadOnly(Array.Empty<SignalSample>());
         return new WifiMonitorSnapshot(_version, bssid, active && _isMonitoring, _interval,
-            tracked?.IsPresent, samples, SignalStatisticsCalculator.Calculate(samples), tracked?.Error);
+            tracked?.IsPresent, samples, SignalStatisticsCalculator.Calculate(samples), tracked?.Error)
+            { IsMeasurementStale = tracked?.IsMeasurementStale ?? false };
     }
 
     private WifiMonitorSnapshot ChangedSnapshotLocked(string bssid)
@@ -230,6 +237,8 @@ public sealed class WifiMonitorService : IWifiMonitorService, IDisposable
         public SignalHistory History { get; } = history;
         public bool? IsPresent { get; set; }
         public WifiException? Error { get; set; }
+        public DateTimeOffset? LastMeasurementTimestamp { get; set; }
+        public bool IsMeasurementStale { get; set; }
         public long LastAccess { get; set; }
     }
 }
