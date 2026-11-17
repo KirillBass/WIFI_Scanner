@@ -16,7 +16,6 @@
     <StyleInclude Source="/Styles/ApplicationStyles.axaml" />
   </Application.Styles>
   <Application.DataTemplates>
-    <DataTemplate DataType="vm:DashboardViewModel"><views:DashboardView /></DataTemplate>
     <DataTemplate DataType="vm:AccessPointsViewModel"><views:AccessPointsView /></DataTemplate>
     <DataTemplate DataType="vm:ChannelsViewModel"><views:ChannelsView /></DataTemplate>
     <DataTemplate DataType="vm:SignalViewModel"><views:SignalView /></DataTemplate>

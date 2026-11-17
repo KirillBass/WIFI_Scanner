@@ -1,27 +1,45 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels" x:Class="WirelessSecurityAnalyzer.App.Views.SettingsView" x:DataType="vm:SettingsViewModel">
-  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-  <StackPanel Spacing="14" MaxWidth="950" HorizontalAlignment="Left">
+  <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
     <TextBlock Text="Настройки" Classes="title" />
-    <TextBlock Text="Папка журналов" Classes="section" />
-    <TextBlock Text="Журнал помогает разобраться в ошибках подключения и сканирования." Classes="subtitle" />
-    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" IsEnabled="{Binding !IsBusy}">
-      <TextBox x:Name="LogDirectoryText" Text="{Binding SelectedDirectory}" IsReadOnly="True" MinWidth="450" />
-      <Button Grid.Column="1" x:Name="ChooseLogDirectoryButton" Content="Изменить…" Command="{Binding ChangeDirectoryCommand}" />
-    </Grid>
-    <WrapPanel>
-      <Button Content="Открыть текущую папку" Command="{Binding OpenDirectoryCommand}" Margin="0,0,10,4" />
-      <Button Content="Сбросить путь по умолчанию" Command="{Binding ResetDirectoryCommand}" />
-    </WrapPanel>
-    <StackPanel Spacing="4" IsVisible="{Binding UsesDifferentDirectory}">
-      <TextBlock Text="Сейчас журнал записывается в:" Classes="subtitle" />
-      <TextBlock Text="{Binding LogsDirectory}" TextWrapping="Wrap" />
+    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+      <StackPanel Spacing="12" MaxWidth="900" HorizontalAlignment="Left" Margin="0,0,8,8">
+        <TextBlock Text="Общие" Classes="section" />
+        <Grid ColumnDefinitions="260,*" ColumnSpacing="12">
+          <TextBlock Text="Вкладка при запуске:" VerticalAlignment="Center" />
+          <ComboBox Grid.Column="1" ItemsSource="{Binding StartupPages}" SelectedItem="{Binding StartupPage, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+        </Grid>
+        <CheckBox Content="Запоминать выбранный сетевой интерфейс" IsChecked="{Binding RememberInterface}" ToolTip.Tip="При следующем запуске выбирается сохранённый активный интерфейс. Если он недоступен, используется первый доступный. Поиск сам не запускается." />
+        <TextBlock Text="Сканирование" Classes="section" Margin="0,4,0,0" />
+        <Grid ColumnDefinitions="260,*" ColumnSpacing="12">
+          <TextBlock Text="Профиль портов по умолчанию:" VerticalAlignment="Center" />
+          <ComboBox Grid.Column="1" ItemsSource="{Binding PortProfiles}" SelectedIndex="{Binding DefaultPortProfile, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+        </Grid>
+        <CheckBox Content="Включать собственный ПК в аудит по умолчанию" IsChecked="{Binding IncludeLocal}" ToolTip.Tip="Проверять службы своего ПК на его IPv4-адресе выбранной сети. Только после явного запуска аудита." />
+        <TextBlock Text="Отображение" Classes="section" Margin="0,4,0,0" />
+        <CheckBox Content="Компактные строки таблиц" IsChecked="{Binding CompactRows}" ToolTip.Tip="Уменьшить высоту строк во всех таблицах. Применяется после сохранения настроек." />
+        <TextBlock Text="Журналы" Classes="section" Margin="0,4,0,0" />
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsEnabled="{Binding !IsBusy}">
+          <TextBox x:Name="LogDirectoryText" Text="{Binding SelectedDirectory}" IsReadOnly="True" />
+          <Button Grid.Column="1" x:Name="ChooseLogDirectoryButton" Content="Изменить…" Command="{Binding ChangeDirectoryCommand}" />
+        </Grid>
+        <WrapPanel>
+          <Button Content="Открыть текущую папку" Command="{Binding OpenDirectoryCommand}" Margin="0,0,8,4" />
+          <Button Content="Сбросить путь" Command="{Binding ResetDirectoryCommand}" />
+        </WrapPanel>
+        <TextBlock Text="{Binding LogsDirectory, StringFormat='Сейчас журнал записывается в: {0}'}" IsVisible="{Binding UsesDifferentDirectory}" Classes="subtitle" />
+        <TextBlock Text="Путь сохраняется сразу и применяется после перезапуска. Хранятся 14 последних ежедневных файлов." Classes="subtitle" />
+        <TextBlock Text="О программе" Classes="section" Margin="0,4,0,0" />
+        <TextBlock Text="{Binding VersionText}" />
+        <TextBlock Text="Анализ Wi-Fi, поиск устройств и аудит сетевых служб и HTTP-сайтов. C# / .NET 10, Avalonia, ScottPlot. Windows 10/11 x64." Classes="subtitle" />
+      </StackPanel>
+    </ScrollViewer>
+    <StackPanel Grid.Row="2" Spacing="5">
+      <ProgressBar IsVisible="{Binding IsBusy}" IsIndeterminate="True" Height="3" />
+      <TextBlock Text="{Binding WarningMessage}" IsVisible="{Binding HasWarning}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding HasError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding StatusText}" Classes="subtitle" />
+      <Button x:Name="SavePreferencesButton" Content="Сохранить настройки" Command="{Binding ApplyPreferencesCommand}" Classes="primary" HorizontalAlignment="Left" />
     </StackPanel>
-    <TextBlock Text="{Binding StatusText}" Classes="subtitle" />
-    <ProgressBar IsVisible="{Binding IsBusy}" IsIndeterminate="True" Height="3" />
-    <TextBlock Text="{Binding WarningMessage}" IsVisible="{Binding HasWarning}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" />
-    <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding HasError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" />
-    <TextBlock Text="Журналы хранятся локально. Ротация ежедневная, сохраняются 14 последних файлов." Classes="subtitle" />
-  </StackPanel>
-  </ScrollViewer>
+  </Grid>
 </UserControl>

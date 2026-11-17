@@ -1,70 +1,33 @@
 <controls:PlotViewBase xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:controls="using:WirelessSecurityAnalyzer.App.Controls"
-             xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels"
+             xmlns:controls="using:WirelessSecurityAnalyzer.App.Controls" xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels"
              xmlns:plot="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
              x:Class="WirelessSecurityAnalyzer.App.Views.ChannelsView" x:DataType="vm:ChannelsViewModel">
-  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-    <StackPanel Spacing="8">
-      <StackPanel Spacing="5">
-        <TextBlock Text="Каналы" Classes="title" />
-        <TextBlock Text="Оценочная загруженность канала · влияние соседних Wi-Fi сетей" Classes="subtitle" />
-      </StackPanel>
-      <Grid ColumnDefinitions="160,*,Auto,Auto" ColumnSpacing="10">
-        <ComboBox x:Name="ChannelBandSelector" ItemsSource="{Binding Bands}" SelectedIndex="{Binding SelectedBandIndex}" HorizontalAlignment="Stretch" />
-        <TextBlock Grid.Column="1" Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" />
-        <Button Grid.Column="2" x:Name="RefreshButton" Content="Обновить эфир" Command="{Binding RefreshAnalysisCommand}" />
-        <Button Grid.Column="3" Content="Остановить" Command="{Binding RefreshAnalysisCancelCommand}" IsVisible="{Binding IsBusy}" />
-      </Grid>
-      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="3" />
+  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto" RowSpacing="8">
+    <Grid ColumnDefinitions="*,140,Auto,Auto" ColumnSpacing="8">
+      <TextBlock Text="Каналы" Classes="title" VerticalAlignment="Center" />
+      <ComboBox Grid.Column="1" x:Name="ChannelBandSelector" ItemsSource="{Binding Bands}" SelectedIndex="{Binding SelectedBandIndex}" HorizontalAlignment="Stretch" />
+      <Button Grid.Column="2" x:Name="RefreshButton" Content="Обновить эфир" Classes="primary" Command="{Binding RefreshAnalysisCommand}" />
+      <Button Grid.Column="3" Content="Остановить" Command="{Binding RefreshAnalysisCancelCommand}" IsVisible="{Binding IsBusy}" />
+    </Grid>
+    <ProgressBar Grid.Row="1" IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="3" />
+    <StackPanel Grid.Row="2" Spacing="5">
       <ContentControl Content="{Binding}" ContentTemplate="{StaticResource WifiErrorTemplate}" IsVisible="{Binding HasError}" />
-      <Button Content="Выбрать сеть в «Эфире»" Classes="link" IsVisible="{Binding !HasScanSnapshot}" HorizontalAlignment="Left"
-              Command="{ReflectionBinding $parent[Window].DataContext.NavigateCommand}" CommandParameter="Эфир" />
-      <WrapPanel>
-        <TextBlock Text="{Binding SnapshotText}" Classes="subtitle" Margin="0,0,20,4" />
-        <TextBlock Text="{Binding BssCount, StringFormat='BSS в диапазоне: {0}'}" Classes="subtitle" Margin="0,0,20,4" />
-        <TextBlock Text="{Binding ModelWidthText}" Classes="subtitle" Margin="0,0,0,4" />
-      </WrapPanel>
-      <TextBlock Text="Расположение и перекрытие BSS" Classes="section" />
-      <Border Classes="card" Padding="6" Height="300" ClipToBounds="True">
-        <Grid>
-          <plot:AvaPlot x:Name="ChannelPlot" />
-          <Border Background="{DynamicResource CardBrush}" IsVisible="{Binding !HasAnalysis}"
-                  HorizontalAlignment="Center" VerticalAlignment="Center" Padding="18" MaxWidth="600">
-            <TextBlock Text="{Binding EmptyText}" Classes="subtitle" TextAlignment="Center" />
-          </Border>
-        </Grid>
-      </Border>
-      <TextBlock x:Name="CurveDetails" Text="Наведите курсор на кривую, чтобы увидеть SSID, BSSID, канал и RSSI." Classes="subtitle" MinHeight="20" />
-      <Border Classes="card" IsVisible="{Binding HasAnalysis}">
-        <StackPanel Spacing="7">
-          <WrapPanel>
-            <TextBlock Text="{Binding RecommendationText}" FontWeight="SemiBold" Margin="0,0,20,4" />
-            <TextBlock Text="{Binding RecommendedScoreText}" />
-          </WrapPanel>
-          <TextBlock Text="Рекомендация эвристическая. Набор каналов-кандидатов не проверен для вашего региона и адаптера; доступность канала нужно сверить с настройками роутера." Classes="subtitle" FontSize="12" />
-        </StackPanel>
-      </Border>
-      <TextBlock Text="Оценка 0-100% по RSSI и перекрытию BSS, а не измеренный airtime. Ширина канала моделируется приближённо." Classes="subtitle" FontSize="12" />
-      <Border Classes="card" IsVisible="{Binding HasChannelRows}" Padding="0" Height="330" ClipToBounds="True">
-        <TableView x:Name="ChannelTable" ItemsSource="{Binding Channels}" CanUserResizeColumns="True">
-          <TableView.Columns>
-            <TableViewColumn Header="Канал" Binding="{ReflectionBinding Channel}" Width="65" />
-            <TableViewColumn Header="Частота" Binding="{ReflectionBinding Frequency}" Width="110" />
-            <TableViewColumn Header="BSS на канале" Binding="{ReflectionBinding DirectBssCount}" Width="130" />
-            <TableViewColumn Header="Влияющих BSS" Binding="{ReflectionBinding InfluencingBssCount}" Width="140" />
-            <TableViewColumn Header="Оценка, %" Binding="{ReflectionBinding ScoreText}" Width="100" />
-            <TableViewColumn Header="Состояние" Binding="{ReflectionBinding LevelText}" Width="110" />
-            <TableViewColumn Header="Рекомендация" Width="145">
-              <TableViewColumn.CellTemplate>
-                <DataTemplate x:DataType="vm:ChannelRowViewModel">
-                  <TextBlock Text="Рекомендован" IsVisible="{Binding IsRecommended}" />
-                </DataTemplate>
-              </TableViewColumn.CellTemplate>
-            </TableViewColumn>
-          </TableView.Columns>
-        </TableView>
-      </Border>
-      <TextBlock Text="{Binding DataNotesText}" Classes="subtitle" IsVisible="{Binding HasDataNotes}" FontSize="12" />
+      <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasError}" Classes="subtitle" />
     </StackPanel>
-  </ScrollViewer>
+    <Border Grid.Row="3" Classes="card" Padding="5" ClipToBounds="True">
+      <Grid>
+        <plot:AvaPlot x:Name="ChannelPlot" />
+        <Border Background="{DynamicResource CardBrush}" IsVisible="{Binding !HasAnalysis}" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="14" MaxWidth="600">
+          <TextBlock Text="{Binding EmptyText}" Classes="subtitle" TextAlignment="Center" />
+        </Border>
+      </Grid>
+    </Border>
+    <TextBlock Grid.Row="4" x:Name="CurveDetails" Text="Наведите курсор на кривую: SSID, BSSID, канал и RSSI." Classes="subtitle" MinHeight="20" />
+    <StackPanel Grid.Row="5" Spacing="4" ToolTip.Tip="{Binding SnapshotText}">
+      <TextBlock Text="{Binding ChannelSummary}" FontWeight="SemiBold" TextWrapping="Wrap" />
+      <TextBlock Text="Оценка по RSSI и перекрытию, не измерение загрузки эфира." Classes="subtitle"
+                 ToolTip.Tip="Канал выбран по эвристике. Доступность в регионе и поддержку адаптером нужно проверить в настройках роутера." />
+      <TextBlock Text="{Binding DataNotesText}" IsVisible="{Binding HasDataNotes}" Classes="subtitle" />
+    </StackPanel>
+  </Grid>
 </controls:PlotViewBase>

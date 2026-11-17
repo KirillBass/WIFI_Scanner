@@ -14,26 +14,25 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly DevicesViewModel _devices;
     private readonly IWifiConnectionService? _connections;
     private readonly NetworkAuditViewModel? _audit;
-    private readonly DashboardViewModel _dashboard;
+    private readonly NavigationItem _defaultNavigation;
     public AccessPointsViewModel AccessPoints => _accessPoints;
     public NetworkSessionViewModel? Session { get; }
-    public MainWindowViewModel(DashboardViewModel dashboard, AccessPointsViewModel accessPoints,
+    public MainWindowViewModel(AccessPointsViewModel accessPoints,
         ChannelsViewModel channels, SignalViewModel signal, DevicesViewModel devices, SettingsViewModel settings,
         NetworkAuditViewModel? audit = null, NetworkSessionViewModel? session = null, IWifiConnectionService? connections = null)
     {
-        _accessPoints = accessPoints; _dashboard = dashboard;
+        _accessPoints = accessPoints;
         _signal = signal;
         _channels = channels;
         _devices = devices;
         _audit = audit; Session = session; _connections = connections;
-        var navigation = new List<NavigationItem> { new("Главная", dashboard), new("Эфир", accessPoints), new("Каналы", channels),
+        var navigation = new List<NavigationItem> { new("Эфир", accessPoints), new("Каналы", channels),
             new("Сигнал", signal), new("Устройства", devices) };
         if (audit is not null) navigation.Add(new("Сетевой аудит", audit));
         navigation.Add(new("Настройки", settings));
         Navigation = navigation.AsReadOnly();
-        _selectedNavigation = Navigation[0];
-        dashboard.AttachWorkflow(devices, audit, session);
-        dashboard.NavigationRequested += Navigate;
+        _defaultNavigation = Navigation.FirstOrDefault(n => n.Title == settings.StartupPage) ?? Navigation.FirstOrDefault(n => n.Page == audit) ?? Navigation[0];
+        _selectedNavigation = _defaultNavigation;
         if (audit is not null) { audit.NavigationRequested += Navigate; audit.PropertyChanged += OnActivityChanged; }
         devices.PropertyChanged += OnActivityChanged;
         accessPoints.PropertyChanged += OnActivityChanged;
@@ -45,7 +44,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CurrentPage))]
     private NavigationItem? _selectedNavigation;
-    public ViewModelBase CurrentPage => (SelectedNavigation ?? Navigation[0]).Page;
+    public ViewModelBase CurrentPage => (SelectedNavigation ?? _defaultNavigation).Page;
     public string ActivitySummary => (_audit?.IsAuditing == true ? _audit.CompactStatus + " · " :
         _devices.IsBusy ? "Поиск устройств · " : _devices.IsMonitoring ? "Мониторинг устройств · " :
         _accessPoints.IsBusy ? "Сканирование эфира · " : _signal.IsMonitoring ? "Мониторинг сигнала · " : "") + (Session?.Summary ?? "Выберите сетевой интерфейс");
@@ -64,7 +63,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     partial void OnSelectedNavigationChanged(NavigationItem? value)
     {
         // Keep the default page selected when the tab strip receives an empty selection.
-        if (value is null) SelectedNavigation = Navigation[0];
+        if (value is null) SelectedNavigation = _defaultNavigation;
     }
 
     [RelayCommand]
@@ -75,7 +74,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     }
     public void Stop()
     {
-        _dashboard.NavigationRequested -= Navigate; _dashboard.Dispose();
         _devices.PropertyChanged -= OnActivityChanged; _accessPoints.PropertyChanged -= OnActivityChanged;
         _signal.PropertyChanged -= OnActivityChanged;
         if (Session is not null) Session.PropertyChanged -= OnActivityChanged;

@@ -64,6 +64,8 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
     [ObservableProperty] private int _selectedBandIndex;
     [ObservableProperty] private bool _strongestFirst = true;
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(ConnectCommand))] private bool _isBusy;
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(DisconnectCommand))] private bool _isDisconnecting;
+    [ObservableProperty] private string _connectionStatusText = "";
     [ObservableProperty] private string _adapterText = "Проверка Wi-Fi адаптеров…";
     [ObservableProperty] private string _lastScanText = "Сканирование ещё не выполнялось";
 
@@ -87,7 +89,7 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
         row.AccessPoint.Security.GroupCipher == WifiCipherType.Tkip
             ? "Для подключения будет запрошен AES/CCMP; групповой шифр сети - TKIP. Windows выбирает точку данного SSID."
             : "Подключение выполняется к SSID; Windows выбирает подходящую точку доступа.";
-    private bool CanConnect() => !_stopped && !IsBusy && _connections is not null && Session is { IsConnecting: false } &&
+    private bool CanConnect() => !_stopped && !IsBusy && !IsDisconnecting && _connections is not null && Session is { IsConnecting: false } &&
         SelectedAccessPoint is { AccessPoint.IsHidden: false } row && row.AccessPoint.Ssid.Length > 0 && WifiConnectionPolicy.IsSupported(row.AccessPoint.Security);
     [RelayCommand(CanExecute = nameof(CanConnect))]
     private void Connect()
@@ -95,8 +97,26 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
         if (SelectedAccessPoint is { } row && _connections is not null && Session is not null)
             ConnectionRequested?.Invoke(new(row.AccessPoint, _adapterService, _connections, Session));
     }
+    private bool CanDisconnect() => !_stopped && !IsDisconnecting && _connections is not null && Session is { CanDisconnectWifi: true, IsConnecting: false };
+    [RelayCommand(CanExecute = nameof(CanDisconnect))]
+    private async Task DisconnectAsync()
+    {
+        if (_connections is null) return;
+        IsDisconnecting = true; ConnectionStatusText = "Отключение от Wi-Fi…";
+        try
+        {
+            var result = await _connections.DisconnectAsync(_lifetime.Token);
+            ConnectionStatusText = result.FailureReason.Length > 0 ? result.FailureReason : "Wi-Fi отключён.";
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (Exception ex) { Logger.Warning(ex, "Wi-Fi disconnect failed"); ConnectionStatusText = "Не удалось отключиться от Wi-Fi. Подробности в журнале."; }
+        finally { IsDisconnecting = false; }
+    }
     private void OnSessionChanged(object? sender, PropertyChangedEventArgs e)
-    { if (e.PropertyName == nameof(NetworkSessionViewModel.Current)) ConnectCommand.NotifyCanExecuteChanged(); }
+    {
+        if (e.PropertyName == nameof(NetworkSessionViewModel.Current))
+        { ConnectCommand.NotifyCanExecuteChanged(); DisconnectCommand.NotifyCanExecuteChanged(); }
+    }
 
     public async Task InitializeAsync()
     {
@@ -161,12 +181,14 @@ public sealed partial class AccessPointsViewModel : WifiViewModelBase
         if (Session is not null) Session.PropertyChanged -= OnSessionChanged;
         _lifetime.Cancel();
         ScanCommand.Cancel();
+        DisconnectCommand.NotifyCanExecuteChanged();
     }
 
     public async Task StopAsync()
     {
         Stop();
         if (ScanCommand.ExecutionTask is { } task) await task;
+        if (DisconnectCommand.ExecutionTask is { } disconnect) await disconnect;
     }
 
     private void OnScanUpdated(object? sender, WifiScanSnapshot snapshot) =>

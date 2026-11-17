@@ -8,6 +8,7 @@ public sealed class LoggingSettingsService
 {
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
     private readonly string _preferencesPath;
+    private readonly object _saveGate = new();
     private bool _preferenceSaved;
     public LoggingSettingsService(string? applicationDataDirectory = null)
     {
@@ -18,6 +19,8 @@ public sealed class LoggingSettingsService
         ActiveDirectory = DefaultDirectory;
     }
     public string DefaultDirectory { get; }
+    public UserPreferences UserPreferences { get; private set; } = new();
+    public event EventHandler? PreferencesChanged;
     public string ActiveDirectory { get; private set; }
     public string? ConfiguredDirectory { get; private set; }
     public string RequestedDirectory => ConfiguredDirectory ?? DefaultDirectory;
@@ -28,7 +31,7 @@ public sealed class LoggingSettingsService
 
     public ILogger InitializeLogger()
     {
-        ConfiguredDirectory = null; WarningMessage = ""; _preferenceSaved = false;
+        ConfiguredDirectory = null; WarningMessage = ""; _preferenceSaved = false; UserPreferences = new();
         try
         {
             if (File.Exists(_preferencesPath))
@@ -37,10 +40,11 @@ public sealed class LoggingSettingsService
                 var preferences = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(_preferencesPath), Json);
                 if (preferences?.SchemaVersion != 1) throw new InvalidDataException("Unknown preferences format.");
                 ConfiguredDirectory = Normalize(preferences.Directory);
+                UserPreferences = (preferences.UserInterface ?? new()).Normalize();
             }
         }
         catch (Exception ex) when (IsFileError(ex) || ex is JsonException)
-        { WarningMessage = "Не удалось прочитать настройки журналов. Используется папка по умолчанию."; }
+        { WarningMessage = "Не удалось прочитать настройки. Используются значения по умолчанию."; }
 
         var fallback = Path.Combine(Path.GetTempPath(), "WirelessSecurityAnalyzer-" + Environment.UserName, "Logs");
         foreach (var directory in new[] { RequestedDirectory, DefaultDirectory, fallback }.Distinct())
@@ -70,15 +74,40 @@ public sealed class LoggingSettingsService
     {
         var directory = Normalize(value);
         Validate(directory ?? DefaultDirectory);
+        lock (_saveGate)
+        {
+            WriteSettings(directory, UserPreferences);
+            ConfiguredDirectory = directory;
+            _preferenceSaved = true;
+            WarningMessage = "";
+        }
+    }
+
+    public void SavePreferences(UserPreferences preferences)
+    {
+        lock (_saveGate)
+        {
+            var normalized = preferences.Normalize();
+            WriteSettings(ConfiguredDirectory, normalized);
+            UserPreferences = normalized;
+        }
+        PreferencesChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void RememberInterface(string interfaceId)
+    {
+        if (UserPreferences.RememberInterface && UserPreferences.LastInterfaceId != interfaceId)
+            SavePreferences(UserPreferences with { LastInterfaceId = interfaceId });
+    }
+
+    private void WriteSettings(string? directory, UserPreferences preferences)
+    {
         Directory.CreateDirectory(Path.GetDirectoryName(_preferencesPath)!);
         var temporary = _preferencesPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            File.WriteAllText(temporary, JsonSerializer.Serialize(new Preferences(directory), Json));
+            File.WriteAllText(temporary, JsonSerializer.Serialize(new Preferences(directory, UserInterface: preferences), Json));
             File.Move(temporary, _preferencesPath, overwrite: true);
-            ConfiguredDirectory = directory;
-            _preferenceSaved = true;
-            WarningMessage = "";
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
@@ -98,5 +127,5 @@ public sealed class LoggingSettingsService
         stream.Flush(flushToDisk: true);
     }
     private static bool IsFileError(Exception ex) => ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.Security.SecurityException;
-    private sealed record Preferences(string? Directory, int SchemaVersion = 1);
+    private sealed record Preferences(string? Directory, int SchemaVersion = 1, UserPreferences? UserInterface = null);
 }

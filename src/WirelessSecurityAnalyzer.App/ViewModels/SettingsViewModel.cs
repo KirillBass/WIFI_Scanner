@@ -10,8 +10,21 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly LoggingSettingsService _logging;
     private readonly IUserFolderService _folders;
     public SettingsViewModel(AccessPointsViewModel accessPoints, LoggingSettingsService? logging = null, IUserFolderService? folders = null)
-    { AccessPoints = accessPoints; _logging = logging ?? new(); _folders = folders ?? new UserFolderService(); }
+    {
+        AccessPoints = accessPoints; _logging = logging ?? new(); _folders = folders ?? new UserFolderService();
+        var preferences = _logging.UserPreferences;
+        _rememberInterface = preferences.RememberInterface; _startupPage = preferences.StartupPage;
+        _defaultPortProfile = preferences.DefaultPortProfile; _includeLocal = preferences.IncludeLocal; _compactRows = preferences.CompactRows;
+    }
     public AccessPointsViewModel AccessPoints { get; }
+    public IReadOnlyList<string> StartupPages => UserPreferences.Pages;
+    public IReadOnlyList<string> PortProfiles => NetworkAuditViewModel.PortProfiles;
+    public string VersionText => "Wireless Security Analyzer · версия " + typeof(SettingsViewModel).Assembly.GetName().Version?.Major;
+    [ObservableProperty] private bool _rememberInterface;
+    [ObservableProperty] private string _startupPage;
+    [ObservableProperty] private int _defaultPortProfile;
+    [ObservableProperty] private bool _includeLocal;
+    [ObservableProperty] private bool _compactRows;
     public string LogsDirectory => _logging.ActiveDirectory.Length == 0 ? "Недоступна" : _logging.ActiveDirectory;
     public string SelectedDirectory => _logging.RequestedDirectory;
     public string WarningMessage => _logging.WarningMessage;
@@ -19,11 +32,31 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public bool RestartRequired => _logging.RestartRequired;
     public bool UsesDifferentDirectory => _logging.UsesDifferentDirectory;
     public bool HasError => ErrorMessage.Length > 0;
-    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(ChangeDirectoryCommand), nameof(ResetDirectoryCommand), nameof(OpenDirectoryCommand))]
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(ChangeDirectoryCommand), nameof(ResetDirectoryCommand), nameof(OpenDirectoryCommand), nameof(ApplyPreferencesCommand))]
     private bool _isBusy;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasError))] private string _errorMessage = "";
     [ObservableProperty] private string _statusText = "";
     private bool CanEdit() => !IsBusy;
+    [RelayCommand(CanExecute = nameof(CanEdit))]
+    private void ApplyPreferences()
+    {
+        ErrorMessage = "";
+        try
+        {
+            _logging.SavePreferences(new UserPreferences
+            {
+                RememberInterface = RememberInterface,
+                LastInterfaceId = AccessPoints.Session?.Current.Network?.InterfaceId ?? _logging.UserPreferences.LastInterfaceId,
+                StartupPage = StartupPage, DefaultPortProfile = DefaultPortProfile, IncludeLocal = IncludeLocal, CompactRows = CompactRows
+            });
+            StatusText = "Настройки сохранены. Высота строк применена. Стартовая вкладка и параметры аудита будут использованы при следующем запуске.";
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "User preferences save failed");
+            ErrorMessage = "Не удалось сохранить настройки. Проверьте доступ к пользовательской папке данных.";
+        }
+    }
     [RelayCommand(CanExecute = nameof(CanEdit))]
     private async Task ChangeDirectoryAsync()
     {

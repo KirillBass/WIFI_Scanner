@@ -1,61 +1,42 @@
 <controls:PlotViewBase xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:controls="using:WirelessSecurityAnalyzer.App.Controls"
-             xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels"
+             xmlns:controls="using:WirelessSecurityAnalyzer.App.Controls" xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels"
              xmlns:plot="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
              x:Class="WirelessSecurityAnalyzer.App.Views.SignalView" x:DataType="vm:SignalViewModel">
-  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
   <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="8">
-    <StackPanel Spacing="5">
+    <Grid ColumnDefinitions="*,Auto">
       <TextBlock Text="Сигнал" Classes="title" />
-      <TextBlock Text="История RSSI выбранного BSSID · последние 300 измерений" Classes="subtitle" />
-      <Button Content="Найти точки доступа в «Эфире»" Classes="link" IsVisible="{Binding !HasAccessPoints}" HorizontalAlignment="Left"
+      <Button Grid.Column="1" Content="Найти точки в «Эфире»" Classes="link" IsVisible="{Binding !HasAccessPoints}"
               Command="{ReflectionBinding $parent[Window].DataContext.NavigateCommand}" CommandParameter="Эфир" />
-    </StackPanel>
-    <Border Grid.Row="1" Classes="card">
-      <Grid ColumnDefinitions="*,190" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="9">
-        <ComboBox ItemsSource="{Binding AccessPoints}" SelectedItem="{Binding SelectedAccessPoint}"
-                  IsEnabled="{Binding CanChangeSelection}" PlaceholderText="Выберите точку доступа" HorizontalAlignment="Stretch">
-          <ComboBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:AccessPointRowViewModel"><TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" /></DataTemplate>
-          </ComboBox.ItemTemplate>
-        </ComboBox>
-        <StackPanel Grid.Column="1" Spacing="4">
-          <TextBlock Text="Интервал мониторинга" Classes="subtitle" FontSize="12" />
-          <ComboBox ItemsSource="{Binding IntervalOptions}" SelectedItem="{Binding SelectedIntervalSeconds}"
-                    IsEnabled="{Binding CanChangeSelection}" HorizontalAlignment="Stretch">
-            <ComboBox.ItemTemplate><DataTemplate x:DataType="x:Int32"><TextBlock Text="{Binding StringFormat='{}{0} секунд'}" /></DataTemplate></ComboBox.ItemTemplate>
-          </ComboBox>
-        </StackPanel>
-        <WrapPanel Grid.Row="1" Grid.ColumnSpan="2">
-          <TextBlock Text="{Binding SelectedSsid, StringFormat='SSID: {0}'}" Margin="0,0,18,0" />
-          <TextBlock Text="{Binding SelectedBssid, StringFormat='BSSID: {0}'}" Margin="0,0,18,0" />
-          <TextBlock Text="{Binding SelectedChannel, StringFormat='Канал: {0}'}" Margin="0,0,18,0" />
-          <TextBlock Text="{Binding SelectedBand, StringFormat='Диапазон: {0}'}" />
-        </WrapPanel>
-      </Grid>
-    </Border>
-    <StackPanel Grid.Row="2" Spacing="9">
-      <StackPanel Orientation="Horizontal" Spacing="10">
-        <Button Content="Начать мониторинг" Command="{Binding StartMonitoringCommand}" />
-        <Button Content="Остановить" Command="{Binding StopMonitoringCommand}" />
-        <Button Content="Очистить историю" Command="{Binding ClearHistoryCommand}" />
-        <TextBlock Text="Останавливаем…" IsVisible="{Binding IsStopping}" VerticalAlignment="Center" Classes="subtitle" />
-      </StackPanel>
+    </Grid>
+    <Grid Grid.Row="1" ColumnDefinitions="*,95,Auto,Auto,Auto" ColumnSpacing="8">
+      <ComboBox ItemsSource="{Binding AccessPoints}" SelectedItem="{Binding SelectedAccessPoint}" IsEnabled="{Binding CanChangeSelection}" PlaceholderText="Выберите точку доступа / BSSID" HorizontalAlignment="Stretch">
+        <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:AccessPointRowViewModel"><TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" /></DataTemplate></ComboBox.ItemTemplate>
+      </ComboBox>
+      <ComboBox Grid.Column="1" ItemsSource="{Binding IntervalOptions}" SelectedItem="{Binding SelectedIntervalSeconds}" IsEnabled="{Binding CanChangeSelection}" HorizontalAlignment="Stretch" ToolTip.Tip="Интервал мониторинга">
+        <ComboBox.ItemTemplate><DataTemplate x:DataType="x:Int32"><TextBlock Text="{Binding StringFormat='{}{0} сек'}" /></DataTemplate></ComboBox.ItemTemplate>
+      </ComboBox>
+      <Button Grid.Column="2" Content="Запустить" Classes="primary" Command="{Binding StartMonitoringCommand}" />
+      <Button Grid.Column="3" Content="Остановить" Command="{Binding StopMonitoringCommand}" />
+      <Button Grid.Column="4" Content="Очистить историю" Command="{Binding ClearHistoryCommand}" />
+    </Grid>
+    <StackPanel Grid.Row="2" Spacing="5">
+      <WrapPanel>
+        <TextBlock Text="{Binding SelectedBssid, StringFormat='BSSID: {0}'}" Margin="0,0,16,0" Classes="subtitle" />
+        <TextBlock Text="{Binding SelectedChannel, StringFormat='Канал: {0}'}" Margin="0,0,16,0" Classes="subtitle" />
+        <TextBlock Text="{Binding SelectedBand}" Classes="subtitle" />
+      </WrapPanel>
       <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />
+      <TextBlock Text="Останавливаем…" IsVisible="{Binding IsStopping}" Classes="subtitle" />
       <ContentControl Content="{Binding}" ContentTemplate="{StaticResource WifiErrorTemplate}" IsVisible="{Binding HasError}" />
     </StackPanel>
-    <Grid Grid.Row="3" ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="4">
-      <TextBlock Text="Текущий RSSI" Classes="subtitle" />
-      <TextBlock Grid.Column="1" Text="Средний" Classes="subtitle" />
-      <TextBlock Grid.Column="2" Text="Минимальный" Classes="subtitle" />
-      <TextBlock Grid.Column="3" Text="Максимальный" Classes="subtitle" />
-      <TextBlock Grid.Row="1" Text="{Binding CurrentRssiText}" />
-      <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AverageRssiText}" />
-      <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding MinimumRssiText}" />
-      <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding MaximumRssiText}" />
+    <Grid Grid.Row="3" ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="3">
+      <TextBlock Text="Текущий RSSI" Classes="subtitle" /><TextBlock Grid.Column="1" Text="Средний" Classes="subtitle" />
+      <TextBlock Grid.Column="2" Text="Минимальный" Classes="subtitle" /><TextBlock Grid.Column="3" Text="Максимальный" Classes="subtitle" />
+      <TextBlock Grid.Row="1" Text="{Binding CurrentRssiText}" /><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AverageRssiText}" />
+      <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding MinimumRssiText}" /><TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding MaximumRssiText}" />
       <TextBlock Grid.Row="2" Grid.ColumnSpan="4" Text="{Binding SignalQualityText}" Classes="subtitle" />
     </Grid>
-    <Border Grid.Row="4" Classes="card" Padding="5" Height="300" ClipToBounds="True">
+    <Border Grid.Row="4" Classes="card" Padding="5" ClipToBounds="True">
       <Grid>
         <plot:AvaPlot x:Name="SignalPlot" />
         <Border Background="{DynamicResource CardBrush}" IsVisible="{Binding !HasSamples}" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="14">
@@ -63,10 +44,9 @@
         </Border>
       </Grid>
     </Border>
-    <Grid Grid.Row="5" ColumnDefinitions="*,Auto">
+    <Grid Grid.Row="5" ColumnDefinitions="*,Auto" IsVisible="{Binding HasSamples}">
       <TextBlock Text="{Binding LastSeenText, StringFormat='Последнее измерение: {0}'}" Classes="subtitle" />
       <TextBlock Grid.Column="1" Text="{Binding SampleCount, StringFormat='Измерений: {0} / 300'}" Classes="subtitle" />
     </Grid>
   </Grid>
-  </ScrollViewer>
 </controls:PlotViewBase>

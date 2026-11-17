@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using WirelessSecurityAnalyzer.App.ViewModels;
@@ -29,6 +30,8 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var services = new ServiceCollection();
+            ApplyAppearance();
+            Program.LoggingSettings.PreferencesChanged += OnPreferencesChanged;
             services.AddSingleton<ILogger>(Log.Logger);
             services.AddSingleton(Program.LoggingSettings);
             services.AddSingleton<IUserFolderService, UserFolderService>();
@@ -86,7 +89,6 @@ public partial class App : Application
             services.AddSingleton<INetworkAuditService, NetworkAuditService>();
             services.AddSingleton<ISystemSettingsService, WindowsSystemSettingsService>();
             services.AddSingleton<AccessPointsViewModel>();
-            services.AddSingleton<DashboardViewModel>();
             services.AddSingleton<ChannelsViewModel>();
             services.AddSingleton<SignalViewModel>();
             services.AddSingleton<DevicesViewModel>();
@@ -99,10 +101,23 @@ public partial class App : Application
             desktop.Exit += (_, _) =>
             {
                 viewModel.Stop();
+                Program.LoggingSettings.PreferencesChanged -= OnPreferencesChanged;
                 _services.Dispose();
                 Log.Information("Application exit");
             };
         }
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private void OnPreferencesChanged(object? sender, EventArgs e)
+    {
+        if (Dispatcher.UIThread.CheckAccess()) ApplyAppearance();
+        else Dispatcher.UIThread.Post(ApplyAppearance);
+    }
+    private void ApplyAppearance()
+    {
+        var compact = Program.LoggingSettings.UserPreferences.CompactRows;
+        Resources["TableRowHeight"] = compact ? 26d : 32d;
+        Resources["TableCellPadding"] = new Thickness(6, compact ? 1 : 3);
     }
 }

@@ -26,7 +26,7 @@
 - `Network/Identity/DeviceIdentityCache.cs`: явная очистка при смене сессии.
 - `App.axaml`, `App.axaml.cs`: шаблон страницы и singleton-регистрации DI.
 - `AccessPointsViewModel.cs`, `AccessPointsView.axaml`: выбор сети, доступность кнопки подключения и объяснение неподдерживаемой защиты.
-- `DashboardViewModel.cs`, `DashboardView.axaml`: текущее соединение.
+- `NetworkSessionViewModel.cs`, `MainWindow.axaml`: общий сетевой контекст и строка состояния. Вкладка «Главная» удалена; отключение Wi-Fi перенесено в «Эфир».
 - `DevicesViewModel.cs`: выбор сети общей сессии, очистка прежних строк, блокировка discovery до IPv4.
 - `MainWindowViewModel.cs`, `MainWindow.axaml`, `MainWindow.axaml.cs`: седьмая вкладка, постоянный статус, модальный диалог, переход после Ready, асинхронный shutdown.
 - `README.md`, `docs/IMPLEMENTATION_STATUS.md`: использование и статус реализации.

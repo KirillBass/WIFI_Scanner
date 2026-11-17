@@ -2,7 +2,7 @@
              xmlns:vm="using:WirelessSecurityAnalyzer.App.ViewModels" xmlns:models="using:WirelessSecurityAnalyzer.Core.Models"
              x:Class="WirelessSecurityAnalyzer.App.Views.DevicesView" x:DataType="vm:DevicesViewModel">
   <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="8">
-    <TextBlock Text="Устройства локальной сети" Classes="title" ToolTip.Tip="Узлы выбранной IPv4-подсети. Этот список не определяет клиентов конкретной точки доступа." />
+    <TextBlock Text="Устройства" Classes="title" ToolTip.Tip="Узлы выбранной IPv4-подсети. Этот список не определяет клиентов конкретной точки доступа." />
     <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="10">
       <ComboBox ItemsSource="{Binding Networks}" SelectedItem="{Binding SelectedNetwork}" IsEnabled="{Binding CanConfigure}" HorizontalAlignment="Stretch" PlaceholderText="Выберите IPv4-интерфейс">
         <ComboBox.ItemTemplate><DataTemplate x:DataType="models:LocalNetworkInfo"><TextBlock Text="{Binding DisplayName}" /></DataTemplate></ComboBox.ItemTemplate>
@@ -17,7 +17,8 @@
         <Button Content="Перейти к аудиту" Classes="link" Command="{ReflectionBinding $parent[Window].DataContext.NavigateCommand}" CommandParameter="Сетевой аудит" />
       </WrapPanel>
       <Expander Header="Имена и мониторинг" HorizontalAlignment="Stretch">
-        <StackPanel Spacing="6" MaxHeight="130">
+        <ScrollViewer MaxHeight="120" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="6" Margin="0,4,0,4">
           <WrapPanel>
             <Button Content="Обновить имена" Command="{Binding RefreshNamesCommand}" Margin="0,0,10,4" />
             <Button Content="Начать мониторинг" Command="{Binding StartMonitoringCommand}" Margin="0,0,10,4" />
@@ -27,16 +28,21 @@
           <TextBlock Text="{Binding InterfaceText}" Classes="subtitle" />
           <TextBlock Text="IP и MAC появляются сразу, имена и производители уточняются отдельно. «Остановить» отменяет и поиск имён." Classes="subtitle" />
         </StackPanel>
+        </ScrollViewer>
       </Expander>
     </StackPanel>
     <StackPanel Grid.Row="3" Spacing="6">
       <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />
       <TextBlock Text="{Binding ReadinessText}" Classes="subtitle" />
-      <Border Classes="card" IsVisible="{Binding HasError}" BorderBrush="{DynamicResource ErrorBrush}" Padding="12">
+      <Border Classes="card" IsVisible="{Binding HasError}" BorderBrush="{DynamicResource ErrorBrush}" Padding="8" MaxHeight="75">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" />
+        </ScrollViewer>
       </Border>
-      <Border Classes="card" IsVisible="{Binding HasWarning}" BorderBrush="{DynamicResource WarningBrush}" Padding="12">
+      <Border Classes="card" IsVisible="{Binding HasWarning}" BorderBrush="{DynamicResource WarningBrush}" Padding="8" MaxHeight="75">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <TextBlock Text="{Binding WarningText}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" />
+        </ScrollViewer>
       </Border>
       <StackPanel IsVisible="{Binding HasProgress}" Spacing="6">
         <ProgressBar Value="{Binding ProgressPercent}" Minimum="0" Maximum="100" Height="4" />
@@ -50,7 +56,7 @@
         <ComboBox Grid.Column="2" ItemsSource="{Binding SortOptions}" SelectedIndex="{Binding SelectedSortIndex}" HorizontalAlignment="Stretch" />
       </Grid>
     </StackPanel>
-      <Border Grid.Row="4" Classes="card" Padding="0" ClipToBounds="True" MinHeight="140">
+      <Border Grid.Row="4" Classes="card" Padding="0" ClipToBounds="True">
         <Grid>
           <TableView ItemsSource="{Binding Devices}" CanUserResizeColumns="True" ScrollViewer.AllowAutoHide="False">
             <TableView.Columns>

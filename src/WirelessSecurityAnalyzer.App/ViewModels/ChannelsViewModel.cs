@@ -38,7 +38,8 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
 
     public IReadOnlyList<string> Bands { get; } = ["2,4 ГГц", "5 ГГц", "6 ГГц"];
     [ObservableProperty] private int _selectedBandIndex;
-    [ObservableProperty] private bool _isBusy;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ChannelSummary), nameof(SnapshotText))] private bool _isBusy;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ChannelSummary))] private bool _isRefreshCancelled;
 
     protected override string UnexpectedErrorMessage => "Не удалось обновить анализ каналов. Подробности сохранены в локальном журнале.";
     protected override string FailureStatus => _scanSnapshot is null ? "Не удалось получить снимок эфира." : "Не удалось обновить эфир. Показан предыдущий снимок.";
@@ -56,9 +57,12 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
         "Снимок: " + _scanSnapshot.CompletedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss", Russian);
     public string ModelWidthText => "Ширина канала: " + _options.DefaultChannelWidthMhz.ToString("0.#", Russian) + " МГц (модель)";
     public string RecommendationText => Analysis?.RecommendedChannel is { } channel
-        ? $"Рекомендуемый по текущей оценке: канал {channel}" : "Рекомендация недоступна";
-    public string RecommendedScoreText => Analysis?.Channels.FirstOrDefault(r => r.IsRecommended) is { } row
-        ? "Оценка: " + row.LoadScorePercent.ToString("0.0", Russian) + "%" : string.Empty;
+        ? $"Предпочтительный по оценке: канал {channel}" : "Рекомендация недоступна";
+    public string ChannelSummary => !HasScanSnapshot ? IsBusy ? "Обновление эфира…" :
+        IsRefreshCancelled ? "Обновление отменено. Снимок эфира не получен." : "Снимок эфира ещё не получен." :
+        (IsRefreshCancelled ? "Обновление отменено · " : "") + $"BSS в диапазоне: {BssCount}" +
+        (HasAnalysis && Analysis?.RecommendedChannel is not null ? " · " + RecommendationText : " · рекомендация недоступна") +
+        (HasError || IsBusy || IsRefreshCancelled ? " · предыдущий снимок" : "");
     public string EmptyText => _scanSnapshot is null ? "Сначала выполните сканирование Wi-Fi эфира." :
         $"В диапазоне {SelectedBandText} точки доступа не обнаружены.";
     public bool HasDataNotes => Analysis is { IgnoredBssCount: > 0 } or { DuplicateBssCount: > 0 } or { InvalidCandidateCount: > 0 };
@@ -80,6 +84,7 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
         IsBusy = true;
+        IsRefreshCancelled = false;
         StatusText = "Обновление общего снимка Wi-Fi…";
         try
         {
@@ -91,7 +96,7 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
         }
         catch (OperationCanceledException) when (linked.IsCancellationRequested)
         {
-            await Dispatcher.UIThread.InvokeAsync(() => StatusText = "Обновление отменено. Последний анализ сохранён.");
+            await Dispatcher.UIThread.InvokeAsync(() => { IsRefreshCancelled = true; StatusText = "Обновление отменено. Последний анализ сохранён."; });
         }
         catch (Exception exception)
         {
@@ -135,6 +140,7 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
         if (snapshot.Version <= _sourceVersion) return;
         _sourceVersion = snapshot.Version;
         _scanSnapshot = snapshot;
+        IsRefreshCancelled = false;
         SetError(null);
         if (_chooseDefaultBand)
         {
@@ -156,6 +162,7 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
         if (failure.Version <= _sourceVersion) return;
         _sourceVersion = failure.Version;
         ShowError(failure.Error);
+        OnPropertyChanged(nameof(ChannelSummary));
     }
 
     private void Recalculate()
@@ -192,6 +199,6 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
         }
         foreach (var name in new[] { nameof(SelectedBand), nameof(SelectedBandText), nameof(Analysis), nameof(Channels),
             nameof(Spectrum), nameof(HasAnalysis), nameof(HasScanSnapshot), nameof(HasChannelRows), nameof(BssCount), nameof(SnapshotText),
-            nameof(RecommendationText), nameof(RecommendedScoreText), nameof(EmptyText), nameof(HasDataNotes), nameof(DataNotesText) }) OnPropertyChanged(name);
+            nameof(RecommendationText), nameof(ChannelSummary), nameof(EmptyText), nameof(HasDataNotes), nameof(DataNotesText) }) OnPropertyChanged(name);
     }
 }

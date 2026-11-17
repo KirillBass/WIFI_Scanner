@@ -8,6 +8,7 @@ using WirelessSecurityAnalyzer.Core.Interfaces;
 using WirelessSecurityAnalyzer.Core.Models;
 using WirelessSecurityAnalyzer.Core.Network;
 using WirelessSecurityAnalyzer.Core.NetworkAudit;
+using WirelessSecurityAnalyzer.App.Services;
 
 namespace WirelessSecurityAnalyzer.App.ViewModels;
 
@@ -32,11 +33,14 @@ public sealed partial class DevicesViewModel : ViewModelBase
     private readonly object _dispatchGate = new();
     private DeviceMonitorSnapshot? _pendingSnapshot;
     private bool _updateQueued;
+    private readonly LoggingSettingsService? _preferences;
+    private bool _interfacesInitialized;
 
     public DevicesViewModel(ILocalNetworkService networks, IDeviceMonitorService monitor, DeviceDiscoveryOptions options, ILogger logger,
-        NetworkSessionViewModel? session = null, INetworkAuditService? audit = null)
+        NetworkSessionViewModel? session = null, INetworkAuditService? audit = null, LoggingSettingsService? preferences = null)
     {
         _networks = networks; _monitor = monitor; _options = options; _logger = logger;
+        _preferences = preferences;
         _snapshot = monitor.Current;
         _monitor.Updated += OnUpdated;
         _session = session;
@@ -155,6 +159,11 @@ public sealed partial class DevicesViewModel : ViewModelBase
             try { value.Subnet.EnsureSweepAllowed(); _sweepAllowed = true; }
             catch (NetworkDiscoveryException exception) { WarningText = GetMessage(exception); }
         if (value is not null && _sweepAllowed) _session?.SelectNetwork(value);
+        if (value is not null && _interfacesInitialized)
+        {
+            try { _preferences?.RememberInterface(value.InterfaceId); }
+            catch (Exception ex) { _logger.Warning(ex, "Unable to remember network interface"); WarningText = "Не удалось сохранить выбранный интерфейс. Выбор действует до закрытия программы."; }
+        }
         OnPropertyChanged(nameof(NetworkSummary)); OnPropertyChanged(nameof(ReadinessText));
         NotifyCounts();
         ScanCommand.NotifyCanExecuteChanged(); StartMonitoringCommand.NotifyCanExecuteChanged();
@@ -174,7 +183,10 @@ public sealed partial class DevicesViewModel : ViewModelBase
                 var previous = SelectedNetwork;
                 Networks.Clear();
                 foreach (var network in networks) Networks.Add(network);
-                SelectedNetwork = networks.FirstOrDefault(n => previous is not null && n.HasSameContext(previous)) ?? networks.FirstOrDefault();
+                var remembered = !_interfacesInitialized && _preferences?.UserPreferences is { RememberInterface: true } p ? p.LastInterfaceId : null;
+                SelectedNetwork = networks.FirstOrDefault(n => previous is not null && n.HasSameContext(previous)) ??
+                    networks.FirstOrDefault(n => remembered is not null && string.Equals(n.InterfaceId, remembered, StringComparison.OrdinalIgnoreCase)) ?? networks.FirstOrDefault();
+                _interfacesInitialized = true;
                 if (SelectedNetwork is null) StatusText = "Активный локальный IPv4-интерфейс не найден.";
                 else _logger.Information("Available local IPv4 contexts {Count}; selected {InterfaceId}", networks.Count, SelectedNetwork.InterfaceId);
             });

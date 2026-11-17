@@ -12,10 +12,10 @@
     </Border>
     <ContentControl Grid.Row="1" Content="{Binding CurrentPage}" Margin="12" />
     <Border Grid.Row="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12,4">
-      <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Text="Wireless Security Analyzer · версия 12" Classes="subtitle" FontSize="11" />
+      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
+        <TextBlock Text="Wireless Security Analyzer · версия 13" Classes="subtitle" FontSize="11" />
         <TextBlock Grid.Column="1" Text="{Binding ActivitySummary}" Classes="subtitle" FontSize="11"
-                   TextTrimming="CharacterEllipsis" MaxWidth="700" ToolTip.Tip="{Binding ActivitySummary}" />
+                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" HorizontalAlignment="Right" ToolTip.Tip="{Binding ActivitySummary}" />
       </Grid>
     </Border>
   </Grid>
