@@ -22,12 +22,13 @@
         </Border>
       </Grid>
     </Border>
-    <TextBlock Grid.Row="4" x:Name="CurveDetails" Text="Наведите курсор на кривую: SSID, MAC-адрес, канал и RSSI." Classes="subtitle" MinHeight="20" />
-    <StackPanel Grid.Row="5" Spacing="4" ToolTip.Tip="{Binding SnapshotText}">
-      <TextBlock Text="{Binding ChannelSummary}" FontWeight="SemiBold" TextWrapping="Wrap" />
-      <TextBlock Text="Оценка по RSSI и перекрытию, не измерение загрузки эфира." Classes="subtitle"
-                 ToolTip.Tip="Канал выбран по эвристике. Доступность в регионе и поддержку адаптером нужно проверить в настройках роутера." />
+    <StackPanel Grid.Row="4" Spacing="4">
+      <TextBlock x:Name="ChannelSummaryText" Text="{Binding ChannelSummary}" FontWeight="SemiBold" TextWrapping="Wrap" ToolTip.Tip="{Binding SnapshotText}" />
+      <TextBlock Text="Результат анализа" Classes="section" />
+      <TextBlock x:Name="AnalysisResultTextBlock" Text="{Binding AnalysisResultText}" Classes="subtitle"
+                 ToolTip.Tip="Программа оценивает влияние обнаруженных сетей по уровню сигнала и перекрытию каналов. Фактическая загрузка эфира не измеряется. Доступность канала можно проверить в настройках роутера." />
       <TextBlock Text="{Binding DataNotesText}" IsVisible="{Binding HasDataNotes}" Classes="subtitle" />
     </StackPanel>
+    <TextBlock Grid.Row="5" x:Name="CurveDetails" Text="Наведите курсор на кривую: SSID, MAC-адрес, канал и RSSI." Classes="subtitle" MinHeight="20" />
   </Grid>
 </controls:PlotViewBase>

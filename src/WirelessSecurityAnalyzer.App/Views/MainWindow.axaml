@@ -20,7 +20,7 @@
     <ContentControl Grid.Row="1" Content="{Binding CurrentPage}" Margin="12" />
     <Border Grid.Row="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12,4">
       <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
-        <TextBlock Text="Wireless Security Analyzer · версия 14" Classes="subtitle" FontSize="11" />
+        <TextBlock Text="Wireless Security Analyzer · версия 15" Classes="subtitle" FontSize="11" />
         <TextBlock Grid.Column="1" Text="{Binding ActivitySummary}" Classes="subtitle" FontSize="11"
                    TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" HorizontalAlignment="Right" ToolTip.Tip="{Binding ActivitySummary}" />
       </Grid>

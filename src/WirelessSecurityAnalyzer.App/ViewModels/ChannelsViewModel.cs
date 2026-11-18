@@ -56,14 +56,28 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
     public string SnapshotText => _scanSnapshot is null ? "Снимок ещё не получен" :
         "Снимок: " + _scanSnapshot.CompletedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss", Russian);
     public string ModelWidthText => "Ширина канала: " + _options.DefaultChannelWidthMhz.ToString("0.#", Russian) + " МГц (модель)";
-    public string RecommendationText => Analysis?.RecommendedChannel is { } channel
-        ? $"Предпочтительный по оценке: канал {channel}" : "Рекомендация недоступна";
-    public string ChannelSummary => !HasScanSnapshot ? IsBusy ? "Обновление эфира…" :
-        IsRefreshCancelled ? "Обновление отменено. Снимок эфира не получен." : "Снимок эфира ещё не получен." :
-        (IsRefreshCancelled ? "Обновление отменено · " : "") + $"BSS в диапазоне: {BssCount}" +
-        (HasAnalysis && Analysis?.RecommendedChannel is not null ? " · " + RecommendationText : " · рекомендация недоступна") +
-        (HasError || IsBusy || IsRefreshCancelled ? " · предыдущий снимок" : "");
+    private int? PreferredChannel => HasAnalysis ? Analysis?.RecommendedChannel : null;
+    public string RecommendationText => PreferredChannel is { } channel ? $"Предпочтительный канал: {channel}" : "";
+    public string ChannelSummary
+    {
+        get
+        {
+            if (!HasScanSnapshot)
+                return IsBusy ? "Обновление эфира…" : IsRefreshCancelled
+                    ? "Обновление отменено. Снимок эфира не получен." : "Снимок эфира ещё не получен.";
+            if (Analysis is null) return "Анализ снимка эфира недоступен.";
+
+            var summary = $"Обнаружено точек доступа: {BssCount}";
+            if (PreferredChannel is not null) summary += "   |   " + RecommendationText;
+            if (IsRefreshCancelled) return summary + " · предыдущий снимок (обновление отменено)";
+            return HasError || IsBusy ? summary + " · предыдущий снимок" : summary;
+        }
+    }
+    public string AnalysisResultText => PreferredChannel is { } channel
+        ? $"Канал {channel} получил минимальную расчётную оценку влияния обнаруженных сетей. В оценке учтены уровень сигнала и перекрытие каналов."
+        : "Недостаточно данных для рекомендации канала";
     public string EmptyText => _scanSnapshot is null ? "Сначала выполните сканирование Wi-Fi эфира." :
+        Analysis is null ? "Не удалось построить график по снимку эфира." :
         $"В диапазоне {SelectedBandText} точки доступа не обнаружены.";
     public bool HasDataNotes => Analysis is { IgnoredBssCount: > 0 } or { DuplicateBssCount: > 0 } or { InvalidCandidateCount: > 0 };
     public string DataNotesText => Analysis is { } a
@@ -199,6 +213,6 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
         }
         foreach (var name in new[] { nameof(SelectedBand), nameof(SelectedBandText), nameof(Analysis), nameof(Channels),
             nameof(Spectrum), nameof(HasAnalysis), nameof(HasScanSnapshot), nameof(HasChannelRows), nameof(BssCount), nameof(SnapshotText),
-            nameof(RecommendationText), nameof(ChannelSummary), nameof(EmptyText), nameof(HasDataNotes), nameof(DataNotesText) }) OnPropertyChanged(name);
+            nameof(RecommendationText), nameof(ChannelSummary), nameof(AnalysisResultText), nameof(EmptyText), nameof(HasDataNotes), nameof(DataNotesText) }) OnPropertyChanged(name);
     }
 }
