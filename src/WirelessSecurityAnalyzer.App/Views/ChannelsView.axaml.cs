@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Input;
+using ScottPlot;
 using WirelessSecurityAnalyzer.App.Controls;
 using WirelessSecurityAnalyzer.App.ViewModels;
 using WirelessSecurityAnalyzer.Core.Models;
@@ -27,12 +28,8 @@ public partial class ChannelsView : PlotViewBase
     protected override void ConfigureAxes()
     {
         var plot = ChannelPlot.Plot;
-        plot.XLabel("Центральная частота, МГц");
+        plot.XLabel("Канал");
         plot.HideLegend();
-        plot.Axes.Bottom.TickGenerator = new ScottPlot.TickGenerators.NumericAutomatic
-        {
-            LabelFormatter = frequency => frequency.ToString("0.#", CultureInfo.GetCultureInfo("ru-RU"))
-        };
     }
 
     protected override void UpdatePlot()
@@ -73,6 +70,7 @@ public partial class ChannelsView : PlotViewBase
             left = channels.Min(c => c.CenterFrequencyMhz) - 15;
             right = channels.Max(c => c.CenterFrequencyMhz) + 15;
         }
+        plot.Axes.Bottom.TickGenerator = new ChannelTicks(analysis);
         plot.Axes.SetLimitsX(left, right);
         plot.Axes.SetLimitsY(bottom, top);
         ChannelPlot.Refresh();
@@ -115,5 +113,46 @@ public partial class ChannelsView : PlotViewBase
         var ap = curve.AccessPoint;
         var ssid = ap.IsHidden || string.IsNullOrEmpty(ap.Ssid) ? "Скрытая сеть" : ap.Ssid;
         return $"{ssid} · {ap.Bssid} · канал {ap.Channel} · {ap.FrequencyMhz:0.#} МГц · {ap.RssiDbm} dBm";
+    }
+
+    private sealed class ChannelTicks(ChannelAnalysisSnapshot? analysis) : ITickGenerator
+    {
+        // Reserve space for labels under detected curves before labeling other channel centers.
+        private readonly Tick[] _channels = analysis is null ? [] : analysis.Spectrum
+            .Select(curve => (Frequency: curve.AccessPoint.FrequencyMhz, curve.AccessPoint.Channel))
+            .OrderBy(point => point.Frequency)
+            .Concat(analysis.Channels.Select(channel => (Frequency: channel.CenterFrequencyMhz, channel.Channel)))
+            .DistinctBy(point => point.Frequency)
+            .Select(point => Tick.Major(point.Frequency, point.Channel.ToString(CultureInfo.InvariantCulture)))
+            .ToArray();
+
+        public Tick[] Ticks { get; private set; } = [];
+        public int MaxTickCount { get; set; } = int.MaxValue;
+
+        public void Regenerate(CoordinateRange range, Edge edge, PixelLength size, Paint paint, LabelStyle labelStyle)
+        {
+            var visible = _channels.Where(tick => range.Contains(tick.Position)).Take(MaxTickCount).ToArray();
+            if (visible.Length <= 1 || size.Length <= 0)
+            {
+                Ticks = visible;
+                return;
+            }
+
+            var unitsPerPixel = range.Length / size.Length;
+            var labeled = new List<(double Position, double HalfWidth)>();
+            var ticks = new List<Tick>(visible.Length);
+            foreach (var tick in visible)
+            {
+                var halfWidth = (labelStyle.Measure(tick.Label, paint).Size.Width + 4) * unitsPerPixel / 2;
+                if (labeled.Any(label => Math.Abs(label.Position - tick.Position) < label.HalfWidth + halfWidth))
+                    ticks.Add(Tick.Minor(tick.Position));
+                else
+                {
+                    labeled.Add((tick.Position, halfWidth));
+                    ticks.Add(tick);
+                }
+            }
+            Ticks = ticks.OrderBy(tick => tick.Position).ToArray();
+        }
     }
 }
