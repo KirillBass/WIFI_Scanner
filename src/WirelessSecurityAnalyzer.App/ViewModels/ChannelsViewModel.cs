@@ -36,7 +36,7 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
         if (_scanState.LastFailure is { } failure) ApplyFailure(failure);
     }
 
-    public IReadOnlyList<string> Bands { get; } = ["2,4 ГГц", "5 ГГц", "6 ГГц"];
+    public IReadOnlyList<string> Bands { get; } = ["2,4 ГГц", "5 ГГц"];
     [ObservableProperty] private int _selectedBandIndex;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ChannelSummary), nameof(SnapshotText))] private bool _isBusy;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ChannelSummary))] private bool _isRefreshCancelled;
@@ -44,8 +44,8 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
     protected override string UnexpectedErrorMessage => "Не удалось обновить анализ каналов. Подробности сохранены в локальном журнале.";
     protected override string FailureStatus => _scanSnapshot is null ? "Не удалось получить снимок эфира." : "Не удалось обновить эфир. Показан предыдущий снимок.";
 
-    public WifiBand SelectedBand => SelectedBandIndex switch { 1 => WifiBand.Ghz5, 2 => WifiBand.Ghz6, _ => WifiBand.Ghz2_4 };
-    public string SelectedBandText => Bands[Math.Clamp(SelectedBandIndex, 0, 2)];
+    public WifiBand SelectedBand => SelectedBandIndex == 1 ? WifiBand.Ghz5 : WifiBand.Ghz2_4;
+    public string SelectedBandText => Bands[SelectedBand == WifiBand.Ghz5 ? 1 : 0];
     public ChannelAnalysisSnapshot? Analysis { get; private set; }
     public IReadOnlyList<ChannelRowViewModel> Channels { get; private set; } = [];
     public IReadOnlyList<ChannelSpectrumCurve> Spectrum => Analysis?.Spectrum ?? Array.Empty<ChannelSpectrumCurve>();
@@ -159,7 +159,7 @@ public sealed partial class ChannelsViewModel : WifiViewModelBase
         if (_chooseDefaultBand)
         {
             var available = snapshot.AccessPoints.Select(ap => WifiChannelHelper.FromFrequency(ap.FrequencyMhz).Band).ToHashSet();
-            var index = Array.FindIndex(new[] { WifiBand.Ghz2_4, WifiBand.Ghz5, WifiBand.Ghz6 }, available.Contains);
+            var index = Array.FindIndex(new[] { WifiBand.Ghz2_4, WifiBand.Ghz5 }, available.Contains);
             if (index >= 0)
             {
                 _chooseDefaultBand = false;
