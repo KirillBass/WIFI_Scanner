@@ -9,7 +9,8 @@ using WirelessSecurityAnalyzer.Core.NetworkAudit;
 
 namespace WirelessSecurityAnalyzer.App.ViewModels;
 
-public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalogReader> readers, ILocalNetworkService? networks) : ViewModelBase
+public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalogReader> readers, ILocalNetworkService? networks,
+    ISmbShareEnumerator? smbShares = null) : ViewModelBase
 {
     private readonly Dictionary<(Guid Audit, string Address, int Port), string> _summaries = [];
     private AuditRow? _endpoint;
@@ -18,27 +19,27 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
     private long _generation;
     private string[] _folders = [];
     private string _root = "";
-    private string _openedShare = "";
 
     public event Action? SummaryChanged;
     public ObservableCollection<ResourceEntry> Entries { get; } = [];
-    public bool IsSmb => _endpoint is not null && TargetServiceMatcher.Family(_endpoint.Protocol) == "SMB";
+    public bool IsSmb => _endpoint?.HasSmbService == true;
     public bool IsFtp => _endpoint?.Protocol == "FTP";
-    public IReadOnlyList<string> LoginModes => IsSmb ? ["Учётная запись Windows", "Другая учётная запись"] : ["Anonymous FTP", "Учётная запись FTP"];
+    public IReadOnlyList<string> LoginModes { get; } = ["Anonymous FTP", "Учётная запись FTP"];
+    public IReadOnlyList<string> SmbLoginModes { get; } = ["Учётная запись Windows", "Другая учётная запись"];
     public bool HasNamedLogin => LoginMode == 1;
     public bool NeedsPlaintextConsent => IsFtp && HasNamedLogin;
     public bool CanOpenFolder => !IsWorking && SelectedEntry?.Kind == ResourceEntryKind.Folder;
     public bool CanGoUp => !IsWorking && _folders.Length > 0;
-    public bool CanRead => !IsWorking && _endpoint is not null && _network is not null;
+    public bool CanRead => !IsWorking && _endpoint is not null && _network is not null && (!IsSmb || _openedSmbShare is not null);
 
     [ObservableProperty] private bool _isExpanded;
-    [ObservableProperty] private string _sharePath = "";
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasNamedLogin), nameof(NeedsPlaintextConsent))]
     private int _loginMode;
     [ObservableProperty] private string _userName = "";
     [ObservableProperty] private string _password = "";
     [ObservableProperty] private bool _allowPlaintext;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(CanOpenFolder), nameof(CanGoUp), nameof(CanRead))]
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(CanOpenFolder), nameof(CanGoUp), nameof(CanRead),
+        nameof(CanListSmbShares), nameof(CanChooseSmbShare))]
     private bool _isWorking;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanOpenFolder))]
     private ResourceEntry? _selectedEntry;
@@ -50,23 +51,36 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
     {
         UserName = Password = "";
         AllowPlaintext = false;
+        if (ShowsSmbShares) RestoreSmbListing(showLogin: true);
     }
 
     partial void OnIsExpandedChanged(bool value)
     {
+        NotifySmbPanel();
         if (value) return;
         Password = "";
         AllowPlaintext = false;
         _operation?.Cancel();
+        if (IsSmb && HasNamedLogin)
+        {
+            _generation++;
+            ResetDirectory();
+            LoginMode = 0;
+            RestoreSmbListing();
+        }
     }
 
     private static (Guid, string, int) Key(AuditRow row) => (row.AuditId, row.Address, row.Port);
-    public string Summary(AuditRow row) => _summaries.GetValueOrDefault(Key(row)) ?? "Каталог не открыт";
+    public string Summary(AuditRow row) => row.HasSmbService
+        ? SmbSummary(row)
+        : _summaries.GetValueOrDefault(Key(row)) ?? "Каталог не открыт";
 
     public void SetScope(Guid auditId)
     {
         foreach (var key in _summaries.Keys.Where(key => key.Audit != auditId).ToArray())
             _summaries.Remove(key);
+        foreach (var key in _shareListings.Keys.Where(key => key.Audit != auditId).ToArray())
+            _shareListings.Remove(key);
     }
 
     public void Select(AuditRow? row, LocalNetworkInfo? network)
@@ -81,22 +95,19 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
         _operation?.Cancel();
         _endpoint = endpoint;
         _network = network;
-        _folders = [];
-        _root = _openedShare = CurrentPath = Counts = "";
-        IsExpanded = false;
-        Entries.Clear();
-        SelectedEntry = null;
+        _smbListing = null;
+        ResetDirectory();
+        IsExpanded = IsSmb;
         LoginMode = 0;
         UserName = Password = "";
         OnPropertyChanged(nameof(IsSmb));
         OnPropertyChanged(nameof(IsFtp));
-        OnPropertyChanged(nameof(LoginModes));
         OnPropertyChanged(nameof(NeedsPlaintextConsent));
         OnPropertyChanged(nameof(CanGoUp));
         OnPropertyChanged(nameof(CanRead));
 
-        SharePath = "";
-        Status = endpoint is null ? "" : Summary(endpoint);
+        RestoreSmbListing();
+        Status = IsFtp ? Summary(endpoint!) : "";
     }
 
     public void Stop() => _operation?.Cancel();
@@ -105,11 +116,12 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
     {
         if (_operation is null) return;
         _operation.Cancel();
-        Status = IsSmb ? "Отмена запрошена. Ожидается завершение вызова Windows." : "Отмена запрошена.";
+        if (ShowsSmbShares) SmbShareMessage = "Отмена запрошена. Ожидается завершение вызова Windows.";
+        else Status = IsSmb ? "Отмена запрошена. Ожидается завершение вызова Windows." : "Отмена запрошена.";
     }
 
     [RelayCommand] private Task ReadRootAsync() => ReadAsync([]);
-    [RelayCommand] private Task RefreshCatalogAsync() => ReadAsync(IsSmb && SharePath.Trim() != _openedShare ? [] : _folders);
+    [RelayCommand] private Task RefreshCatalogAsync() => ReadAsync(_folders);
     [RelayCommand] private Task OpenFolderAsync() => CanOpenFolder && SelectedEntry is { } entry
         ? ReadAsync([.. _folders, entry.Name]) : Task.CompletedTask;
     [RelayCommand] private Task ParentFolderAsync() => CanGoUp ? ReadAsync(_folders[..^1]) : Task.CompletedTask;
@@ -119,11 +131,6 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
         if (!CanRead || _endpoint is not { } endpoint || _network is not { } network) return;
         var reader = readers.FirstOrDefault(r => r.Protocol == TargetServiceMatcher.Family(endpoint.Protocol));
         if (reader is null) return;
-        if (IsSmb && ResourcePath.SmbShare(endpoint.Address, SharePath.Trim()).Length == 0)
-        {
-            Status = $"Укажите UNC-путь вида \\\\{endpoint.Address}\\ИмяПапки.";
-            return;
-        }
         if (NeedsPlaintextConsent && !AllowPlaintext)
         {
             Status = "Подтвердите использование обычного FTP для этой учётной записи.";
@@ -134,23 +141,15 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
             Status = "Укажите имя пользователя.";
             return;
         }
-        if (IsSmb && folders.Length > 0 && _openedShare != SharePath.Trim())
-        {
-            Status = "Сначала откройте указанный ресурс.";
-            return;
-        }
-
         var generation = _generation;
+        var smbShare = _openedSmbShare;
         using var operation = new CancellationTokenSource();
         _operation = operation;
         IsWorking = true;
         _folders = folders;
         if (folders.Length == 0) _root = "";
-        if (IsSmb) _openedShare = SharePath.Trim();
-        var user = UserName.Trim();
-        var parts = IsSmb ? user.Split('\\', 2) : [user];
-        var credential = HasNamedLogin ? new NetworkCredential(parts[^1], Password, parts.Length == 2 ? parts[0] : "") : null;
-        var root = IsSmb ? _openedShare : _root;
+        var credential = CreateCredential();
+        var root = smbShare?.UncPath ?? _root;
         var buffer = new List<ResourceEntry>();
         var known = new HashSet<string>(IsSmb ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         var folderCount = 0;
@@ -204,6 +203,8 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
                 if (generation != _generation) return;
                 if (result.Root.Length > 0) _root = result.Root;
                 if (result.Path.Length > 0) CurrentPath = result.Path;
+                if (smbShare is not null && folders.Length == 0)
+                    SetSmbShareAccess(endpoint, smbShare, result.Access);
                 summary = result.State == CatalogState.Complete && Entries.Count > 0 ? Counts :
                     result.State == CatalogState.Partial ? "Неполный результат. " + result.Message : result.Message;
             }
@@ -227,7 +228,31 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
 
         if (generation != _generation) return;
         Status = summary;
-        _summaries[Key(endpoint)] = summary;
-        SummaryChanged?.Invoke();
+        if (!endpoint.HasSmbService)
+        {
+            _summaries[Key(endpoint)] = summary;
+            SummaryChanged?.Invoke();
+        }
+    }
+
+    private NetworkCredential? CreateCredential()
+    {
+        if (!HasNamedLogin) return null;
+        var user = UserName.Trim();
+        var parts = IsSmb ? user.Split('\\', 2) : [user];
+        return new(parts[^1], Password, parts.Length == 2 ? parts[0] : "");
+    }
+
+    private void ResetDirectory()
+    {
+        _openedSmbShare = null;
+        SelectedSmbShare = null;
+        _folders = [];
+        _root = CurrentPath = Counts = Status = "";
+        Entries.Clear();
+        SelectedEntry = null;
+        OnPropertyChanged(nameof(CanRead));
+        OnPropertyChanged(nameof(CanGoUp));
+        NotifySmbPanel();
     }
 }

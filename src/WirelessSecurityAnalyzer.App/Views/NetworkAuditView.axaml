@@ -66,7 +66,7 @@
         <ComboBox Grid.Column="1" ItemsSource="{Binding DisplayModes}" SelectedIndex="{Binding SelectedDisplayModeIndex}" HorizontalAlignment="Stretch" />
         <ComboBox Grid.Column="2" ItemsSource="{Binding ServiceFilters}" SelectedIndex="{Binding SelectedServiceIndex}" HorizontalAlignment="Stretch" />
         <TextBox Grid.Column="3" Text="{Binding PortFilter, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Порт" />
-        <Button Grid.Column="4" Content="Подробности" Command="{Binding ToggleDetailsCommand}" ToolTip.Tip="Показать или скрыть сведения выбранной строки." />
+        <Button Grid.Column="4" Content="Подробности" Command="{Binding ToggleDetailsCommand}" ToolTip.Tip="Сведения выбранной службы." />
       </Grid>
       <TextBlock Text="{Binding FilterError}" IsVisible="{Binding HasFilterError}" Foreground="{DynamicResource ErrorBrush}" />
     </StackPanel>
@@ -91,6 +91,7 @@
           <StackPanel Spacing="5">
             <TextBlock Text="{Binding SelectionHeading}" Classes="section" TextWrapping="Wrap" />
             <TextBlock Text="{Binding SelectionProduct}" TextWrapping="Wrap" />
+            <TextBlock Text="Служба подтверждена" IsVisible="{Binding HasSmbService}" Foreground="{DynamicResource SignalBrush}" />
           </StackPanel>
           <ScrollViewer Grid.Row="1" IsVisible="{Binding !HasFileService}" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
           <StackPanel Spacing="8">
@@ -112,48 +113,99 @@
           </StackPanel>
           </ScrollViewer>
           <Grid Grid.Row="1" IsVisible="{Binding HasFileService}" RowDefinitions="Auto,*" RowSpacing="8">
-            <TextBlock Text="{Binding FileServiceEvidence}" TextWrapping="Wrap" Classes="subtitle" />
-            <Grid Grid.Row="1" DataContext="{Binding Catalog}" x:DataType="vm:ResourceCatalogViewModel" RowDefinitions="Auto,*,Auto" RowSpacing="8">
-              <StackPanel Spacing="6">
-                <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
-                <ProgressBar IsVisible="{Binding IsWorking}" IsIndeterminate="True" Height="3" />
-                <StackPanel IsVisible="{Binding IsExpanded}" Spacing="6">
-                  <StackPanel IsEnabled="{Binding !IsWorking}" Spacing="6">
-                    <TextBox Text="{Binding SharePath}" IsVisible="{Binding IsSmb}" PlaceholderText="UNC-путь общей папки" />
-                    <ComboBox ItemsSource="{Binding LoginModes}" SelectedIndex="{Binding LoginMode}" HorizontalAlignment="Stretch" />
+            <TextBlock Text="{Binding FileServiceEvidence}" IsVisible="{Binding ShowFtpEvidence}" TextWrapping="Wrap" Classes="subtitle" />
+            <Grid Grid.Row="1" DataContext="{Binding Catalog}" x:DataType="vm:ResourceCatalogViewModel">
+              <Grid x:Name="SmbSharePanel" IsVisible="{Binding ShowsSmbShares}" RowDefinitions="Auto,*,Auto" RowSpacing="8">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="{Binding SmbShareHeading}" Classes="section" />
+                  <TextBlock Text="{Binding SmbShareMessage}" Classes="subtitle" />
+                  <ProgressBar IsVisible="{Binding IsWorking}" IsIndeterminate="True" Height="3" />
+                  <StackPanel IsVisible="{Binding IsSmbAccountEditorOpen}" IsEnabled="{Binding !IsWorking}" Spacing="6">
+                    <ComboBox ItemsSource="{Binding SmbLoginModes}" SelectedIndex="{Binding LoginMode}" HorizontalAlignment="Stretch" />
                     <Grid IsVisible="{Binding HasNamedLogin}" ColumnDefinitions="*,*" ColumnSpacing="6">
-                      <TextBox Text="{Binding UserName}" PlaceholderText="Пользователь" />
+                      <TextBox Text="{Binding UserName}" PlaceholderText="Домен или компьютер\пользователь" />
                       <TextBox Grid.Column="1" Text="{Binding Password}" PasswordChar="●" PlaceholderText="Пароль" />
                     </Grid>
-                    <CheckBox IsChecked="{Binding AllowPlaintext}" IsVisible="{Binding NeedsPlaintextConsent}">
-                      <TextBlock Text="Разрешаю передать данные по FTP без шифрования" TextWrapping="Wrap" />
-                    </CheckBox>
-                    <WrapPanel ItemSpacing="6" LineSpacing="5">
-                      <Button Content="Открыть ресурс" Command="{Binding ReadRootCommand}" IsEnabled="{Binding CanRead}" />
-                      <Button Content="Обновить" Command="{Binding RefreshCatalogCommand}" IsEnabled="{Binding CanRead}" />
-                      <Button Content="Вверх" Command="{Binding ParentFolderCommand}" IsEnabled="{Binding CanGoUp}" />
-                    </WrapPanel>
                   </StackPanel>
-                  <SelectableTextBlock Text="{Binding CurrentPath}" TextWrapping="Wrap" />
                 </StackPanel>
-              </StackPanel>
-              <TableView Grid.Row="1" IsVisible="{Binding IsExpanded}" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry, Mode=TwoWay}" CanUserResizeColumns="True">
-                <TableView.Columns>
-                  <TableViewColumn Header="Имя" Binding="{ReflectionBinding Name}" Width="170" />
-                  <TableViewColumn Header="Тип" Binding="{ReflectionBinding KindText}" Width="65" />
-                  <TableViewColumn Header="Байт" Binding="{ReflectionBinding SizeText}" Width="80" />
-                  <TableViewColumn Header="Изменён" Binding="{ReflectionBinding ModifiedText}" Width="125" />
-                  <TableViewColumn Header="Доступ" Binding="{ReflectionBinding AccessText}" Width="140" />
-                </TableView.Columns>
-              </TableView>
-              <StackPanel Grid.Row="2" IsVisible="{Binding IsExpanded}" Spacing="5">
-                <WrapPanel ItemSpacing="6" LineSpacing="5">
-                  <Button Content="Открыть папку" Command="{Binding OpenFolderCommand}" IsEnabled="{Binding CanOpenFolder}" />
-                  <Button Content="Копировать путь" Click="CopyResourcePath" />
-                  <Button Content="Остановить" Command="{Binding CancelCatalogueCommand}" IsEnabled="{Binding IsWorking}" />
-                </WrapPanel>
-                <TextBlock Text="{Binding Counts}" TextWrapping="Wrap" Classes="subtitle" />
-              </StackPanel>
+                <ListBox Grid.Row="1" x:Name="SmbShareList" ItemsSource="{Binding SmbRows}" SelectedItem="{Binding SelectedSmbShare, Mode=TwoWay}"
+                         IsEnabled="{Binding CanChooseSmbShare}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                  <ListBox.Styles>
+                    <Style Selector="ListBoxItem">
+                      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    </Style>
+                    <Style Selector="TextBlock.available">
+                      <Setter Property="Foreground" Value="{DynamicResource SignalBrush}" />
+                    </Style>
+                  </ListBox.Styles>
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SmbShareRow">
+                      <Grid ColumnDefinitions="*,125,Auto" ColumnSpacing="8" Margin="2,5">
+                        <StackPanel Spacing="3">
+                          <TextBlock Text="{Binding Name}" Classes="section" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Text="{Binding UncPath}" Foreground="{DynamicResource MutedBrush}"
+                                     TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding UncPath}" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{Binding AccessText}" Classes.available="{Binding IsAvailable}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="›" VerticalAlignment="Center" />
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <StackPanel Grid.Row="2" Spacing="6">
+                  <TextBlock Text="{Binding SmbShareCounts}" Classes="subtitle" />
+                  <WrapPanel ItemSpacing="6" LineSpacing="5" IsVisible="{Binding CanEditSmbAccount}">
+                    <Button Content="{Binding SmbListActionText}" Command="{Binding LoadSmbSharesCommand}" IsEnabled="{Binding CanListSmbShares}" />
+                    <Button Content="Учётная запись" Command="{Binding EditSmbAccountCommand}" IsVisible="{Binding !IsSmbAccountEditorOpen}" IsEnabled="{Binding CanListSmbShares}" />
+                    <Button Content="Остановить" Command="{Binding CancelCatalogueCommand}" IsVisible="{Binding IsWorking}" />
+                  </WrapPanel>
+                </StackPanel>
+              </Grid>
+              <Grid IsVisible="{Binding ShowsCatalogStatus}" RowDefinitions="Auto,*,Auto" RowSpacing="8">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+                  <ProgressBar IsVisible="{Binding IsWorking}" IsIndeterminate="True" Height="3" />
+                  <StackPanel IsVisible="{Binding ShowsDirectory}" Spacing="6">
+                    <StackPanel IsEnabled="{Binding !IsWorking}" Spacing="6">
+                      <StackPanel IsVisible="{Binding IsFtp}" Spacing="6">
+                        <ComboBox ItemsSource="{Binding LoginModes}" SelectedIndex="{Binding LoginMode}" HorizontalAlignment="Stretch" />
+                        <Grid IsVisible="{Binding HasNamedLogin}" ColumnDefinitions="*,*" ColumnSpacing="6">
+                          <TextBox Text="{Binding UserName}" PlaceholderText="Пользователь" />
+                          <TextBox Grid.Column="1" Text="{Binding Password}" PasswordChar="●" PlaceholderText="Пароль" />
+                        </Grid>
+                        <CheckBox IsChecked="{Binding AllowPlaintext}" IsVisible="{Binding NeedsPlaintextConsent}">
+                          <TextBlock Text="Разрешаю передать данные по FTP без шифрования" TextWrapping="Wrap" />
+                        </CheckBox>
+                      </StackPanel>
+                      <WrapPanel ItemSpacing="6" LineSpacing="5">
+                        <Button Content="К ресурсам" Command="{Binding BackToSmbSharesCommand}" IsVisible="{Binding IsSmb}" />
+                        <Button Content="Открыть ресурс" Command="{Binding ReadRootCommand}" IsEnabled="{Binding CanRead}" IsVisible="{Binding IsFtp}" />
+                        <Button Content="Обновить" Command="{Binding RefreshCatalogCommand}" IsEnabled="{Binding CanRead}" />
+                        <Button Content="Вверх" Command="{Binding ParentFolderCommand}" IsEnabled="{Binding CanGoUp}" />
+                      </WrapPanel>
+                    </StackPanel>
+                    <SelectableTextBlock Text="{Binding CurrentPath}" TextWrapping="Wrap" />
+                  </StackPanel>
+                </StackPanel>
+                <TableView Grid.Row="1" IsVisible="{Binding ShowsDirectory}" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry, Mode=TwoWay}" CanUserResizeColumns="True">
+                  <TableView.Columns>
+                    <TableViewColumn Header="Имя" Binding="{ReflectionBinding Name}" Width="170" />
+                    <TableViewColumn Header="Тип" Binding="{ReflectionBinding KindText}" Width="65" />
+                    <TableViewColumn Header="Байт" Binding="{ReflectionBinding SizeText}" Width="80" />
+                    <TableViewColumn Header="Изменён" Binding="{ReflectionBinding ModifiedText}" Width="125" />
+                    <TableViewColumn Header="Доступ" Binding="{ReflectionBinding AccessText}" Width="140" />
+                  </TableView.Columns>
+                </TableView>
+                <StackPanel Grid.Row="2" IsVisible="{Binding ShowsDirectory}" Spacing="5">
+                  <WrapPanel ItemSpacing="6" LineSpacing="5">
+                    <Button Content="Открыть папку" Command="{Binding OpenFolderCommand}" IsEnabled="{Binding CanOpenFolder}" />
+                    <Button Content="Копировать путь" Click="CopyResourcePath" />
+                    <Button Content="Остановить" Command="{Binding CancelCatalogueCommand}" IsEnabled="{Binding IsWorking}" />
+                  </WrapPanel>
+                  <TextBlock Text="{Binding Counts}" TextWrapping="Wrap" Classes="subtitle" />
+                </StackPanel>
+              </Grid>
             </Grid>
           </Grid>
         </Grid>

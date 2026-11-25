@@ -22,6 +22,15 @@ public sealed record CatalogResult(ResourceAccess Access, CatalogState State, st
     public string Root { get; init; } = "";
 }
 
+public sealed record SmbShare(string Name, string UncPath);
+
+public sealed record SmbShareListing(IReadOnlyList<SmbShare> Shares, ResourceAccess Access, CatalogState State, string Message);
+
+public interface ISmbShareEnumerator
+{
+    Task<SmbShareListing> ListAsync(LocalNetworkInfo network, AuditRow endpoint, NetworkCredential? credential, CancellationToken token);
+}
+
 public interface IResourceCatalogReader
 {
     string Protocol { get; }
@@ -38,11 +47,13 @@ public static class ResourcePath
     public static bool IsWindowsSegment(string name) => IsSegment(name) && !name.EndsWith(' ') && !name.EndsWith('.') &&
         !name.Any(c => c is '<' or '>' or ':' or '"' or '|' or '?' or '*') && !Path.IsPathFullyQualified(name);
 
+    public static bool IsVisibleShareName(string name) => IsWindowsSegment(name) && !name.EndsWith('$');
+
     public static string SmbShare(string address, string unc)
     {
         var prefix = $"\\\\{address}\\";
         if (!unc.StartsWith(prefix, StringComparison.Ordinal)) return "";
         var name = unc[prefix.Length..].TrimEnd('\\');
-        return IsWindowsSegment(name) && !name.EndsWith('$') && !Path.IsPathFullyQualified(name) ? name : "";
+        return IsVisibleShareName(name) ? name : "";
     }
 }

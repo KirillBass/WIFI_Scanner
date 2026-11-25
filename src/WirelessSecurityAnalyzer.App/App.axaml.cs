@@ -86,7 +86,9 @@ public partial class App : Application
             services.AddSingleton(new HttpSiteDiscoveryOptions());
             services.AddSingleton<IHttpSiteHostResolver, HttpSiteHostResolver>();
             services.AddSingleton<IHttpSiteDiscovery, HttpSiteDiscovery>();
-            services.AddSingleton<IResourceCatalogReader, SmbCatalogReader>();
+            services.AddSingleton<SmbCatalogReader>();
+            services.AddSingleton<IResourceCatalogReader>(p => p.GetRequiredService<SmbCatalogReader>());
+            services.AddSingleton<ISmbShareEnumerator>(p => p.GetRequiredService<SmbCatalogReader>());
             services.AddSingleton<IResourceCatalogReader, FtpCatalogReader>();
             services.AddSingleton<INetworkAuditService, NetworkAuditService>();
             services.AddSingleton<ISystemSettingsService, WindowsSystemSettingsService>();

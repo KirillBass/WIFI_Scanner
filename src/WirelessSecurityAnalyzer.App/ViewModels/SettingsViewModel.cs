@@ -18,7 +18,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     }
     public AccessPointsViewModel AccessPoints { get; }
     public IReadOnlyList<string> StartupPages => UserPreferences.Pages;
-    public string VersionText => "Wireless Security Analyzer · версия " + typeof(SettingsViewModel).Assembly.GetName().Version?.Major;
+    public string VersionText => "Wireless Security Analyzer · версия " + typeof(SettingsViewModel).Assembly.GetName().Version?.ToString(2);
     [ObservableProperty] private bool _rememberInterface;
     [ObservableProperty] private string _startupPage;
     [ObservableProperty] private bool _includeLocal;

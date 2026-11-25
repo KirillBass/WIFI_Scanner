@@ -25,10 +25,11 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     private bool _synchronizingRows;
     public NetworkAuditViewModel(NetworkSessionViewModel session, DevicesViewModel devices, IWifiConnectionService connections,
         INetworkAuditService? audit = null, LoggingSettingsService? preferences = null,
-        IEnumerable<IResourceCatalogReader>? catalogReaders = null, ILocalNetworkService? networks = null)
+        IEnumerable<IResourceCatalogReader>? catalogReaders = null, ILocalNetworkService? networks = null,
+        ISmbShareEnumerator? smbShares = null)
     {
         Session = session; Devices = devices; _connections = connections; _audit = audit;
-        Catalog = new(catalogReaders ?? [], networks);
+        Catalog = new(catalogReaders ?? [], networks, smbShares);
         Catalog.SummaryChanged += FilterRows;
         _selectedProfileIndex = 0;
         _includeLocal = preferences?.UserPreferences.IncludeLocal ?? true;
@@ -39,7 +40,9 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     public DevicesViewModel Devices { get; }
     public ResourceCatalogViewModel Catalog { get; }
     public bool HasFileService => SelectedRow?.HasFileService == true;
-    public string FileServiceEvidence => HasFileService ? SelectedRow!.Service.Evidence : "";
+    public bool HasSmbService => SelectedRow?.HasSmbService == true;
+    public bool ShowFtpEvidence => HasFileService && !HasSmbService;
+    public string FileServiceEvidence => ShowFtpEvidence ? SelectedRow!.Service.Evidence : "";
     public bool HasAudit => _snapshot.AuditId != Guid.Empty;
     public string PrimaryActionText => IsAuditing ? "Остановить" : Session.IsObtainingAddress ? "Получение IPv4…" : "Найти серверы";
     public string ReadinessText => IsAuditing ? "" : Session.IsObtainingAddress ? "Wi-Fi подключён. Дождитесь получения IPv4; при необходимости отмените подключение." :
@@ -141,7 +144,9 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     public string SelectionDetails => SelectedRow?.Details ?? "Выберите строку, чтобы увидеть ответ протокола и сведения об определении службы.";
     public bool HasSelection => SelectedRow is not null;
     public string SelectionHeading => SelectedRow is { } row ? $"{row.Address}:{row.Port} · {row.Protocol}" : "Сведения о службе";
-    public string SelectionProduct => SelectedSite is { Server.Length: > 0 } site ? site.Server : SelectedRow is { } row
+    public string SelectionProduct => SelectedRow is { HasSmbService: true } smb
+        ? string.IsNullOrWhiteSpace(smb.Service.Version) ? "Протокол SMB" : $"Протокол: SMB {smb.Service.Version}"
+        : SelectedSite is { Server.Length: > 0 } site ? site.Server : SelectedRow is { } row
         ? row.Product + (!string.IsNullOrWhiteSpace(row.Service.Version) && row.Service.Version != "-" &&
             !row.Product.Contains(row.Service.Version, StringComparison.OrdinalIgnoreCase) ? " · " + row.Service.Version : "") : "";
     public string SelectionStatus => SelectedSite is not null ? SiteStatus : SelectedRow is { } row ?
@@ -221,7 +226,8 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         if (_synchronizingRows) return;
         Catalog.Select(value, Session.Current.Network);
         if (value is null) IsDetailsExpanded = false;
-        if (value is not null && _detailEndpoint != (value.Address, value.Port)) IsDetailsExpanded = true;
+        if (value is not null && (value.HasSmbService || _detailEndpoint != (value.Address, value.Port)))
+            IsDetailsExpanded = true;
         _detailEndpoint = value is null ? null : (value.Address, value.Port);
         if (value is not null) SelectedFullScanTarget = FullScanTargets.FirstOrDefault(t => t.Address.Equals(value.Target.Address));
         var origin = SelectedSite?.Origin;
@@ -229,14 +235,19 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(SelectedSites)); OnPropertyChanged(nameof(HasSites)); OnPropertyChanged(nameof(HasMultipleSites));
         PreviousSiteCommand.NotifyCanExecuteChanged(); NextSiteCommand.NotifyCanExecuteChanged();
         SelectedSite = value?.HttpSites.FirstOrDefault(s => s.Origin == origin) ?? value?.HttpSites.FirstOrDefault();
-        foreach (var name in new[] { nameof(HasSelection), nameof(SelectionHeading), nameof(SelectionProduct), nameof(HttpAvailabilityText), nameof(SelectionStatus), nameof(SitePosition), nameof(HasFileService), nameof(FileServiceEvidence) }) OnPropertyChanged(name);
+        foreach (var name in new[] { nameof(HasSelection), nameof(SelectionHeading), nameof(SelectionProduct), nameof(HttpAvailabilityText), nameof(SelectionStatus), nameof(SitePosition), nameof(HasFileService), nameof(HasSmbService), nameof(ShowFtpEvidence), nameof(FileServiceEvidence) }) OnPropertyChanged(name);
         ToggleDetailsCommand.NotifyCanExecuteChanged();
     }
     private bool CanToggleDetails() => HasSelection;
     [RelayCommand(CanExecute = nameof(CanToggleDetails))]
     private void ToggleDetails()
     {
-        if (HasFileService) Catalog.IsExpanded = !Catalog.IsExpanded;
+        if (HasSmbService)
+        {
+            Catalog.IsExpanded = true;
+            IsDetailsExpanded = true;
+        }
+        else if (HasFileService) Catalog.IsExpanded = !Catalog.IsExpanded;
         else if (HasSelection) IsDetailsExpanded = !IsDetailsExpanded;
     }
     private bool CanOpenSite() => SelectedSite is { HttpConfirmed: true } site && Uri.TryCreate(site.Url, UriKind.Absolute, out var uri) && uri.Scheme == "http" && uri.UserInfo.Length == 0;
@@ -377,8 +388,12 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
             (search.Length == 0 || $"{r.Address} {r.Name} {r.Protocol} {r.Product} {r.Version}".Contains(search, StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(r => r.HighlightResult).ThenByDescending(r => r.HasFoundSite)
             .ThenBy(r => Convert.ToHexString(r.Target.Address.GetAddressBytes()), StringComparer.Ordinal).ThenBy(r => r.Port)
-            .Select(r => r.HasFileService && Catalog.Summary(r) != r.CatalogSummary
-                ? r with { CatalogSummary = Catalog.Summary(r) } : r).ToArray();
+            .Select(r =>
+            {
+                if (!r.HasFileService) return r;
+                var summary = Catalog.Summary(r);
+                return summary == r.CatalogSummary ? r : r with { CatalogSummary = summary };
+            }).ToArray();
         var selectedResult = selected is null ? null : rows.FirstOrDefault(r => r.AuditId == selected.AuditId &&
             r.Target.Address.Equals(selected.Target.Address) && r.Port == selected.Port);
         _synchronizingRows = true;
@@ -392,7 +407,7 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         SelectedRow = selectedResult is null ? null : Rows.FirstOrDefault(r => r.Equals(selectedResult));
         if (SelectedRow is not null && selected is not null)
         {
-            IsDetailsExpanded = detailsExpanded;
+            IsDetailsExpanded = SelectedRow.HasSmbService || detailsExpanded;
             SelectedSite = SelectedSites.FirstOrDefault(site => site.Origin == selectedOrigin) ?? SelectedSites.FirstOrDefault();
         }
         else if (SelectedRow is null) { Catalog.Select(null, null); IsDetailsExpanded = false; }

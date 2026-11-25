@@ -11,7 +11,7 @@ using WirelessSecurityAnalyzer.Infrastructure.Windows.Interop;
 
 namespace WirelessSecurityAnalyzer.Infrastructure.Windows.NetworkAudit;
 
-public sealed class SmbCatalogReader(ILogger logger) : IResourceCatalogReader
+public sealed partial class SmbCatalogReader(ILogger logger) : IResourceCatalogReader, ISmbShareEnumerator
 {
     private readonly SemaphoreSlim _call = new(1, 1);
     public string Protocol => "SMB";
@@ -19,14 +19,11 @@ public sealed class SmbCatalogReader(ILogger logger) : IResourceCatalogReader
     public async Task<CatalogResult> ReadAsync(LocalNetworkInfo network, AuditRow endpoint, string resourceRoot,
         IReadOnlyList<string> folders, NetworkCredential? credential, Action<ResourceEntry> publish, CancellationToken token)
     {
-        if (!endpoint.HasFileService || TargetServiceMatcher.Family(endpoint.Protocol) != Protocol ||
-            !network.Subnet.ContainsHost(endpoint.Target.Address))
-            return Failure(ResourceAccess.Unavailable, "", "Служба вне текущей сети.");
-        if (endpoint.Port != 445)
-            return Failure(ResourceAccess.Unsupported, "", "Клиент SMB Windows использует TCP 445. Этот порт не будет подменён.");
+        if (EndpointProblem(network, endpoint) is { } problem)
+            return Failure(problem.Access, "", problem.Message);
         var share = ResourcePath.SmbShare(endpoint.Address, resourceRoot);
         if (share.Length == 0 || folders.Any(name => !ResourcePath.IsWindowsSegment(name)))
-            return Failure(ResourceAccess.Unsupported, "", "Укажите UNC-путь известной общей папки на выбранном IP.");
+            return Failure(ResourceAccess.Unsupported, "", "Выберите общую папку из списка этого сервера.");
         if (!await _call.WaitAsync(0, token).ConfigureAwait(false))
             return Failure(ResourceAccess.Unavailable, "", "Ожидается завершение предыдущего запроса Windows.");
 
@@ -42,10 +39,7 @@ public sealed class SmbCatalogReader(ILogger logger) : IResourceCatalogReader
             return await Task.Run(() =>
             {
                 deadline.Token.ThrowIfCancellationRequested();
-                var destination = new SockaddrInet { Family = IpHelperNativeMethods.AfInet,
-                    Ipv4Address = BitConverter.ToUInt32(endpoint.Target.Address.GetAddressBytes()) };
-                if (!endpoint.Target.Address.Equals(network.LocalIpv4) &&
-                    (IpHelperNativeMethods.GetBestInterfaceEx(ref destination, out var index) != 0 || index != network.InterfaceIndex))
+                if (!UsesSelectedInterface(network, endpoint.Target.Address))
                     return Failure(ResourceAccess.Unavailable, root, "Маршрут Windows проходит через другой интерфейс.");
 
                 CatalogResult List()
@@ -75,11 +69,7 @@ public sealed class SmbCatalogReader(ILogger logger) : IResourceCatalogReader
                     return new(ResourceAccess.Granted, CatalogState.Complete, path, count == 0 ? "Каталог пуст." : "Каталог получен.");
                 }
 
-                if (credential is null) return List();
-                if (!LogonUser(credential.UserName, string.IsNullOrEmpty(credential.Domain) ? null : credential.Domain,
-                        credential.Password, 9 /* NEW_CREDENTIALS */, 3 /* WINNT50 */, out var accessToken))
-                    throw new Win32Exception(Marshal.GetLastPInvokeError());
-                using (accessToken) return WindowsIdentity.RunImpersonated(accessToken, List);
+                return WithAccount(credential, List);
             }, deadline.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
@@ -112,6 +102,37 @@ public sealed class SmbCatalogReader(ILogger logger) : IResourceCatalogReader
 
     private static CatalogResult Failure(ResourceAccess access, string path, string message, int count = 0) =>
         new(access, count > 0 ? CatalogState.Partial : CatalogState.Failed, path, message);
+
+    private static (ResourceAccess Access, string Message)? EndpointProblem(LocalNetworkInfo network, AuditRow endpoint)
+    {
+        if (!endpoint.HasSmbService || !network.Subnet.ContainsHost(endpoint.Target.Address))
+            return (ResourceAccess.Unavailable, "Служба SMB вне текущей сети или не подтверждена.");
+        if (endpoint.Port != 445)
+            return (ResourceAccess.Unsupported, "Клиент SMB Windows использует TCP 445.");
+        return null;
+    }
+
+    private static bool UsesSelectedInterface(LocalNetworkInfo network, IPAddress address)
+    {
+        if (address.Equals(network.LocalIpv4)) return true;
+        var destination = new SockaddrInet
+        {
+            Family = IpHelperNativeMethods.AfInet,
+            Ipv4Address = BitConverter.ToUInt32(address.GetAddressBytes())
+        };
+        return IpHelperNativeMethods.GetBestInterfaceEx(ref destination, out var index) == 0 && index == network.InterfaceIndex;
+    }
+
+    private static T WithAccount<T>(NetworkCredential? credential, Func<T> action)
+    {
+        if (credential is null) return action();
+        const int logonNewCredentials = 9;
+        const int providerWinNt50 = 3;
+        if (!LogonUser(credential.UserName, string.IsNullOrEmpty(credential.Domain) ? null : credential.Domain,
+                credential.Password, logonNewCredentials, providerWinNt50, out var accessToken))
+            throw new Win32Exception(Marshal.GetLastPInvokeError());
+        using (accessToken) return WindowsIdentity.RunImpersonated(accessToken, action);
+    }
 
     private static void VerifyDirectory(string path)
     {

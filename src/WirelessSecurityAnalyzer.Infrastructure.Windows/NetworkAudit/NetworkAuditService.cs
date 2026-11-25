@@ -176,6 +176,8 @@ public sealed class NetworkAuditService : INetworkAuditService, IDisposable
                             lock (_gate) _errors++;
                         }
                         ct.ThrowIfCancellationRequested(); CheckSession(session);
+                        if (TargetServiceMatcher.Family(identity.Protocol) == "SMB")
+                            _logger.Debug("SMB negotiation {Address}:{Port}: {Evidence}", work.Target.Address, work.Port, identity.Evidence);
                         lock (_gate)
                         {
                             if (identity.Confidence != ServiceConfidence.Unknown) _identified++;
