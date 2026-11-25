@@ -1,6 +1,6 @@
 # Состояние реализации
 
-Текущий релиз: [Version 16.1](https://github.com/KirillBass/WIFI_Scanner/releases/tag/v16.1.0).
+Текущий релиз: [Version 16.2](https://github.com/KirillBass/WIFI_Scanner/releases/tag/v16.2.0).
 Приложение работает на Windows 10/11 x64. Интерфейс построен на Avalonia, графики на ScottPlot, логика написана на C# и .NET 10.
 
 ## Сканирование Wi-Fi

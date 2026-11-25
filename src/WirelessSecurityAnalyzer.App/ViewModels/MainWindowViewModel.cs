@@ -39,6 +39,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _channels = channels;
         _devices = devices;
         _audit = audit; Session = session; _connections = connections;
+        VersionText = settings.VersionText;
         var navigation = new List<NavigationItem> { new("Эфир", accessPoints), new("Каналы", channels),
             new("Сигнал", signal), new("Устройства", devices) };
         if (audit is not null) navigation.Add(new("Сетевой аудит", audit));
@@ -57,6 +58,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     }
 
     public IReadOnlyList<NavigationItem> Navigation { get; }
+    public string VersionText { get; }
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CurrentPage))]
     private NavigationItem? _selectedNavigation;

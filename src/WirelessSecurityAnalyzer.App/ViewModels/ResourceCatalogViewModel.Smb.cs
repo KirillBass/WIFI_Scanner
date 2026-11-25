@@ -27,8 +27,7 @@ public sealed partial class ResourceCatalogViewModel
         public bool HasList => Result.State == CatalogState.Complete || Rows.Count > 0;
         public string Summary => Result.State switch
         {
-            CatalogState.Complete when Rows.Count > 0 => $"Общих папок: {Rows.Count:N0}",
-            CatalogState.Complete => "Общих папок нет",
+            CatalogState.Complete => $"Общих папок: {Rows.Count:N0}",
             CatalogState.Partial => $"Общих папок: {Rows.Count:N0} · список неполный",
             _ => Result.Access switch
             {
@@ -69,7 +68,7 @@ public sealed partial class ResourceCatalogViewModel
     private string SmbSummary(AuditRow row)
     {
         var key = Key(row);
-        if (_smbLoadingEndpoint == key) return "Обнаружение ресурсов…";
+        if (_smbLoadingEndpoint == key) return "Поиск общих папок…";
         if (row.Port != 445) return "Перечисление доступно на TCP 445";
         if (_endpoint is not null && Key(_endpoint) == key) return _smbListing?.Summary ?? "";
         return _shareListings.GetValueOrDefault(key)?.Summary ?? "";
@@ -131,7 +130,7 @@ public sealed partial class ResourceCatalogViewModel
         _operation = operation;
         _smbLoadingEndpoint = key;
         IsWorking = true;
-        SmbShareMessage = "Получаем список общих папок…";
+        SmbShareMessage = "Поиск общих папок…";
         SummaryChanged?.Invoke();
         try
         {

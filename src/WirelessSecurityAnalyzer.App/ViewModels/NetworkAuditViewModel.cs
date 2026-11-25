@@ -53,29 +53,7 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     public bool HasReadinessMessage => ReadinessText.Length > 0;
     public string ContextSummary => Session.IsReady ? $"{Session.InterfaceName} · {Session.Ipv4}/{Session.Current.PrefixLength}" : "Сеть не выбрана";
     public bool ShowAuditStatus => Session.IsReady || HasAudit || StatusText != "Аудит ещё не запускался.";
-    public string AuditNotice
-    {
-        get
-        {
-            if (_snapshot.Stage != AuditStage.Completed) return "";
-            var progress = _snapshot.Progress;
-            var reasons = new List<string>();
-            if (progress.TimedOut > 0) reasons.Add($"без ответа ({progress.TimedOut})");
-            if (progress.Unavailable > 0) reasons.Add($"недоступно ({progress.Unavailable})");
-            if (progress.Errors > 0) reasons.Add($"ошибки ({progress.Errors})");
-            var unconfirmed = _allRows.Count(r => r.Service.Confidence != ServiceConfidence.High);
-            if (unconfirmed > 0) reasons.Add($"протокол не подтверждён ({unconfirmed})");
-
-            var tcpNotice = reasons.Count > 0 ? $"Неполные сетевые проверки: {string.Join(", ", reasons)}." :
-                _snapshot.Hosts.Any(h => h.IsPartial) ? "Часть сетевых проверок не завершена." : "";
-            if (!_allRows.Any(r => r.HttpSites.Any(s => s.IsPartial || s.State is HttpSiteState.AccessRestricted or HttpSiteState.ConnectionError)))
-                return tcpNotice;
-
-            const string httpNotice = "Есть ограничения при проверке HTTP-страниц. Выберите службу для подробностей.";
-            return tcpNotice.Length == 0 ? httpNotice : tcpNotice + " " + httpNotice;
-        }
-    }
-    public bool HasAuditNotice => AuditNotice.Length > 0;
+    public bool ShowDetailsHint => _snapshot.Stage == AuditStage.Completed && !IsResultsEmpty;
     public string CompactStatus => _snapshot.Stage switch
     {
         AuditStage.Preparing => "Поиск устройств и подготовка целей…",
@@ -278,7 +256,7 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     partial void OnIsAuditingChanged(bool value) => NotifyWorkflow();
     private void NotifyWorkflow()
     {
-        foreach (var property in new[] { nameof(HasAudit), nameof(PrimaryActionText), nameof(ReadinessText), nameof(HasReadinessMessage), nameof(ContextSummary), nameof(ShowAuditStatus), nameof(AuditNotice), nameof(HasAuditNotice), nameof(CompactStatus), nameof(CanConfigure), nameof(CanEditParameters) }) OnPropertyChanged(property);
+        foreach (var property in new[] { nameof(HasAudit), nameof(PrimaryActionText), nameof(ReadinessText), nameof(HasReadinessMessage), nameof(ContextSummary), nameof(ShowAuditStatus), nameof(CompactStatus), nameof(CanConfigure), nameof(CanEditParameters) }) OnPropertyChanged(property);
         PrimaryActionCommand.NotifyCanExecuteChanged();
         ToggleDetailsCommand.NotifyCanExecuteChanged();
     }
@@ -403,7 +381,7 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         var hasEndpointFilter = search.Length > 0 || portText.Length > 0 || service.Length > 0;
         SynchronizeRows(Hosts, _snapshot.Hosts.Where(h => h.SessionId == _snapshot.SessionId && h.AuditId == _snapshot.AuditId &&
             (!IsTargetOnly || h.HasMatch) && (!hasEndpointFilter || addresses.Contains(h.Target.Address))).ToArray());
-        OnPropertyChanged(nameof(IsResultsEmpty)); OnPropertyChanged(nameof(EmptyResultsText));
+        OnPropertyChanged(nameof(IsResultsEmpty)); OnPropertyChanged(nameof(EmptyResultsText)); OnPropertyChanged(nameof(ShowDetailsHint));
         SelectedRow = selectedResult is null ? null : Rows.FirstOrDefault(r => r.Equals(selectedResult));
         if (SelectedRow is not null && selected is not null)
         {

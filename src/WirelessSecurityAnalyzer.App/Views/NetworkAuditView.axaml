@@ -59,7 +59,7 @@
       <TextBlock Text="{Binding ReadinessText}" IsVisible="{Binding HasReadinessMessage}" Classes="subtitle" />
       <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding HasError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" />
       <TextBlock Text="{Binding CompactStatus}" IsVisible="{Binding ShowAuditStatus}" TextWrapping="Wrap" />
-      <TextBlock Text="{Binding AuditNotice}" IsVisible="{Binding HasAuditNotice}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" />
+      <TextBlock Text="Выберите службу для подробностей." IsVisible="{Binding ShowDetailsHint}" Classes="subtitle" />
       <ProgressBar Value="{Binding ProgressPercent}" IsVisible="{Binding IsAuditing}" Minimum="0" Maximum="100" Height="3" />
       <Grid ColumnDefinitions="*,190,120,75,Auto" ColumnSpacing="8">
         <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="IP, имя, служба или продукт" />

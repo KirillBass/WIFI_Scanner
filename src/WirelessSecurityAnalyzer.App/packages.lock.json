@@ -278,7 +278,7 @@
           "AngleSharp": "[1.10.2, )",
           "FluentFTP": "[55.1.0, )",
           "Serilog": "[4.4.0, )",
-          "WirelessSecurityAnalyzer.Core": "[16.1.0, )"
+          "WirelessSecurityAnalyzer.Core": "[16.2.0, )"
         }
       },
       "AngleSharp": {

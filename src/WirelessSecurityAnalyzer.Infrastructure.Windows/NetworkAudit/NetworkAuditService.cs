@@ -236,9 +236,15 @@ public sealed class NetworkAuditService : INetworkAuditService, IDisposable
                 _cancellation = null; cancellation.Dispose();
             }
             Notify(finished);
+            var progress = finished.Progress;
+            var unconfirmed = finished.Rows.Count(row => row.Service.Confidence != ServiceConfidence.High);
+            var partialHosts = finished.Hosts.Count(host => host.IsPartial);
+            var limitedHttp = finished.Rows.Sum(row => row.HttpSites.Count(site =>
+                site.IsPartial || site.State is HttpSiteState.AccessRestricted or HttpSiteState.ConnectionError));
             _logger.Information("Network audit {AuditId} end: {Stage}, checked {Checked}/{Total}, open {Open}, identified {Identified}, elapsed {Elapsed}",
-                finished.AuditId, finished.Stage, finished.Progress.Checked, finished.Progress.Total, finished.Progress.Open,
-                finished.Progress.Identified, finished.Progress.Elapsed);
+                finished.AuditId, finished.Stage, progress.Checked, progress.Total, progress.Open, progress.Identified, progress.Elapsed);
+            _logger.Information("Network audit {AuditId} diagnostics: timed out {TimedOut}, unavailable {Unavailable}, errors {Errors}, unconfirmed {Unconfirmed}, partial hosts {PartialHosts}, limited HTTP results {LimitedHttp}",
+                finished.AuditId, progress.TimedOut, progress.Unavailable, progress.Errors, unconfirmed, partialHosts, limitedHttp);
         }
     }
     private async Task EnrichHttpAsync(NetworkSession session, AuditRow candidate, CancellationToken token)
