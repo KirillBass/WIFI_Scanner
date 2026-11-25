@@ -13,7 +13,7 @@ public abstract class ViewModelBase : ObservableObject
             if (!visible.Contains(rows[i])) rows.RemoveAt(i);
         for (var i = 0; i < target.Count; i++)
         {
-            if (i < rows.Count && ReferenceEquals(rows[i], target[i])) continue;
+            if (i < rows.Count && EqualityComparer<T>.Default.Equals(rows[i], target[i])) continue;
             var oldIndex = rows.IndexOf(target[i]);
             if (oldIndex >= 0) rows.Move(oldIndex, i);
             else rows.Insert(i, target[i]);

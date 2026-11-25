@@ -30,11 +30,13 @@ public sealed class HttpSiteDiscovery : IHttpSiteDiscovery, IDisposable
     }
     public async Task DiscoverAsync(LocalNetworkInfo network, AuditRow candidate, Action<IReadOnlyList<HttpSiteResult>> publish, CancellationToken cancellationToken)
     {
+        if (!candidate.HasConfirmedHttp) return;
+
         var scope = new HttpSiteScope(network, candidate.Target.Address, candidate.Port, _names, _localAddresses(), candidate.Target.IsLocal);
         var origin = new UriBuilder("http", candidate.Target.Address.ToString(), candidate.Port).Uri;
         var initial = new HttpSiteResult(candidate.SessionId, candidate.AuditId, candidate.Target.Address, candidate.Port, origin,
-            candidate.Protocol, candidate.Product, $"Открытый TCP-порт; профиль {candidate.Profile}")
-            { HttpConfirmed = candidate.Protocol == "HTTP" };
+            candidate.Protocol, candidate.Product, $"HTTP подтверждён; профиль {candidate.Profile}")
+            { HttpConfirmed = true };
         if (!scope.IsAllowedTarget)
         {
             publish([initial with { Message = "HTTP-адрес не входит в область аудита. Этот ПК проверяется по выбранному IPv4 при включённом флажке «Включить этот ПК»." }]); return;

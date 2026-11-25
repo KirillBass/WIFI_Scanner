@@ -66,7 +66,7 @@ public sealed class LocalDnsServerProvider : ILocalDnsServerProvider
             n.Id.Equals(network.InterfaceId, StringComparison.OrdinalIgnoreCase));
         if (adapter is null) return [];
         var properties = adapter.GetIPProperties();
-        if (properties.GetIPv4Properties()?.Index != network.InterfaceIndex ||
+        if (WindowsLocalNetworkService.GetIpv4Index(adapter, properties) != network.InterfaceIndex ||
             !properties.UnicastAddresses.Any(a => a.Address.Equals(network.LocalIpv4))) return [];
         return SelectServers(network, properties.DnsAddresses);
     }

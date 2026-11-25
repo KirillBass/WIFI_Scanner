@@ -7,5 +7,6 @@
     <ProjectReference Include="../WirelessSecurityAnalyzer.Core/WirelessSecurityAnalyzer.Core.csproj" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="AngleSharp" />
+    <PackageReference Include="FluentFTP" />
   </ItemGroup>
 </Project>

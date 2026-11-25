@@ -200,7 +200,7 @@ public sealed class NetworkAuditService : INetworkAuditService, IDisposable
                     {
                         AuditRow candidate;
                         lock (_gate) candidate = _rows[(work.Target.Address, work.Port)];
-                        if (candidate.Protocol is "HTTP" or "Unknown")
+                        if (candidate.HasConfirmedHttp)
                         {
                             // Release the detection socket before the pooled HTTP client opens its own connection.
                             await connection.DisposeAsync().ConfigureAwait(false);
@@ -249,17 +249,6 @@ public sealed class NetworkAuditService : INetworkAuditService, IDisposable
                     _current.AuditId != candidate.AuditId || !_rows.TryGetValue((candidate.Target.Address, candidate.Port), out var row)) return;
                 var current = sites.Where(s => s.SessionId == candidate.SessionId && s.AuditId == candidate.AuditId &&
                     s.Address.Equals(candidate.Target.Address) && s.Port == candidate.Port).ToArray();
-                var confirmed = current.FirstOrDefault(s => s.HttpConfirmed);
-                if (row.Protocol == "Unknown" && confirmed is not null)
-                {
-                    var (product, version) = ProbeIo.HttpProduct(confirmed.Server);
-                    row = row with { Service = new("HTTP", product, version, ServiceConfidence.High,
-                        confirmed.Evidence.Length > 0 ? confirmed.Evidence : $"HTTP GET: {confirmed.StatusCode} · {confirmed.Url}",
-                        "HTTP подтверждён ограниченной проверкой страниц."), DetectedAt = _clock.GetUtcNow() };
-                    _identified++;
-                    _hosts[candidate.Target.Address].InconclusivePorts.Remove(candidate.Port);
-                    _hosts[candidate.Target.Address].Summary = null;
-                }
                 _rows[(candidate.Target.Address, candidate.Port)] = row with { HttpSites = Array.AsReadOnly(current) };
             }
             Publish(force: true);

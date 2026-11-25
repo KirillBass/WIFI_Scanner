@@ -47,10 +47,10 @@ public sealed partial class FtpServiceDetector : IServiceDetector
             return Task.FromResult<ServiceIdentity?>(null);
         return Task.FromResult<ServiceIdentity?>(new("FTP", known.Success ? known.Groups[1].Value : null,
             known.Groups[2].Success ? known.Groups[2].Value : null,
-            known.Success || text.Contains("FTP", StringComparison.OrdinalIgnoreCase) ? ServiceConfidence.High : ServiceConfidence.Medium,
+            ServiceConfidence.Medium,
             ProbeIo.Clean(productLine ?? line, 512), "Получено приветствие 220. Вход не выполнялся."));
     }
-    // Used only by an explicitly started targeted audit. A bare 220 is also possible in SMTP.
+    // A bare 220 is also possible in SMTP.
     // SYST asks for the FTP system type without logging in or accessing resources.
     internal static async Task<ServiceIdentity?> ConfirmAmbiguousGreetingAsync(ServiceProbe probe, CancellationToken token)
     {
@@ -71,7 +71,8 @@ public sealed partial class FtpServiceDetector : IServiceDetector
             {
                 var line = raw.TrimEnd('\r');
                 if (line.StartsWith("215 ", StringComparison.Ordinal) && line.Length > 4)
-                    return new("FTP", null, null, ServiceConfidence.High, ProbeIo.Clean(line, 512),
+                    return new("FTP", null, null, ServiceConfidence.High,
+                        "FTP 220 · SYST " + ProbeIo.Clean(line, 512),
                         "Приветствие 220 и ответ на SYST. Вход и запрос ресурсов не выполнялись.");
                 if (line.Length >= 4 && line[0] is '4' or '5' && line[1..3].All(char.IsAsciiDigit) && line[3] == ' ') return null;
             }

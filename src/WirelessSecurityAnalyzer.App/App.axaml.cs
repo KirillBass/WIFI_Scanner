@@ -86,6 +86,8 @@ public partial class App : Application
             services.AddSingleton(new HttpSiteDiscoveryOptions());
             services.AddSingleton<IHttpSiteHostResolver, HttpSiteHostResolver>();
             services.AddSingleton<IHttpSiteDiscovery, HttpSiteDiscovery>();
+            services.AddSingleton<IResourceCatalogReader, SmbCatalogReader>();
+            services.AddSingleton<IResourceCatalogReader, FtpCatalogReader>();
             services.AddSingleton<INetworkAuditService, NetworkAuditService>();
             services.AddSingleton<ISystemSettingsService, WindowsSystemSettingsService>();
             services.AddSingleton<AccessPointsViewModel>();

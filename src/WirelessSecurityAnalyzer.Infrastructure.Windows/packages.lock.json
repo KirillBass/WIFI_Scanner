@@ -8,6 +8,12 @@
         "resolved": "1.10.2",
         "contentHash": "f/5wfCkGt6eDs2CEJSXZWKmuvOd58mSkN/fyZ88X9btackH2AhXxR6DrTRdak7pK5/pP0EZhHDE8EupnNJgawg=="
       },
+      "FluentFTP": {
+        "type": "Direct",
+        "requested": "[55.1.0, )",
+        "resolved": "55.1.0",
+        "contentHash": "RXA6WEaziJiSt/lrOxbpxfkOyTY1YaeQiCKzsVoQQxEwcoI0dtoTzGiqS47mrqq3zBuETMwaVjI7FLTCcJC80w=="
+      },
       "Serilog": {
         "type": "Direct",
         "requested": "[4.4.0, )",

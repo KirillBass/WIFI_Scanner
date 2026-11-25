@@ -1,4 +1,6 @@
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
+using Avalonia.Interactivity;
 using System.ComponentModel;
 using WirelessSecurityAnalyzer.App.ViewModels;
 
@@ -13,31 +15,55 @@ public partial class NetworkAuditView : UserControl
         SizeChanged += (_, _) => ArrangeDetails();
         DataContextChanged += (_, _) =>
         {
-            if (_viewModel is not null) _viewModel.PropertyChanged -= OnStateChanged;
+            Subscribe(false);
             _viewModel = DataContext as NetworkAuditViewModel;
-            if (_viewModel is not null) _viewModel.PropertyChanged += OnStateChanged;
+            Subscribe(true);
             ArrangeDetails();
         };
         DetachedFromVisualTree += (_, _) =>
         {
-            if (_viewModel is not null) _viewModel.PropertyChanged -= OnStateChanged;
+            Subscribe(false);
+            if (_viewModel is not null) _viewModel.Catalog.IsExpanded = false;
         };
         AttachedToVisualTree += (_, _) =>
         {
-            if (_viewModel is not null) { _viewModel.PropertyChanged -= OnStateChanged; _viewModel.PropertyChanged += OnStateChanged; }
+            Subscribe(false);
+            Subscribe(true);
             ArrangeDetails();
         };
     }
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(NetworkAuditViewModel.IsDetailsExpanded)) ArrangeDetails();
+        if (e.PropertyName is nameof(NetworkAuditViewModel.IsDetailsExpanded) or nameof(ResourceCatalogViewModel.IsExpanded)) ArrangeDetails();
+    }
+    private void Subscribe(bool listen)
+    {
+        if (_viewModel is null) return;
+        if (listen)
+        {
+            _viewModel.PropertyChanged += OnStateChanged;
+            _viewModel.Catalog.PropertyChanged += OnStateChanged;
+        }
+        else
+        {
+            _viewModel.PropertyChanged -= OnStateChanged;
+            _viewModel.Catalog.PropertyChanged -= OnStateChanged;
+        }
+    }
+    private async void CopyResourcePath(object? sender, RoutedEventArgs e)
+    {
+        var catalog = _viewModel?.Catalog;
+        var path = catalog?.SelectedEntry?.RemotePath ?? catalog?.CurrentPath;
+        if (!string.IsNullOrEmpty(path) && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            await clipboard.SetTextAsync(path);
     }
     private void ArrangeDetails()
     {
         var visible = _viewModel?.IsDetailsExpanded == true;
-        var wide = Bounds.Width >= 1100;
-        ResultsLayout.ColumnDefinitions = new ColumnDefinitions(visible && wide ? "*,8,350" : "*");
-        ResultsLayout.RowDefinitions = new RowDefinitions(visible && !wide ? "2*,8,*" : "*");
+        var catalog = _viewModel?.Catalog.IsExpanded == true;
+        var wide = Bounds.Width >= (catalog ? 940 : 1100);
+        ResultsLayout.ColumnDefinitions = new ColumnDefinitions(visible && wide ? catalog ? "*,8,470" : "*,8,350" : "*");
+        ResultsLayout.RowDefinitions = new RowDefinitions(visible && !wide ? catalog ? "*,8,2*" : "2*,8,*" : "*");
         Grid.SetColumn(AuditDetailsPanel, visible && wide ? 2 : 0);
         Grid.SetRow(AuditDetailsPanel, visible && !wide ? 2 : 0);
     }

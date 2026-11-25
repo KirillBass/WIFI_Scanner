@@ -46,8 +46,12 @@ public sealed class ServiceDetectionEngine(IPortScanner scanner, IEnumerable<ISe
                 try
                 {
                     var identity = await detector.DetectAsync(probe, deadline.Token).ConfigureAwait(false);
-                    if (targeted && detector is FtpServiceDetector && !TargetServiceMatcher.IsConfirmed(identity ?? ServiceIdentity.Unknown))
-                        identity = await FtpServiceDetector.ConfirmAmbiguousGreetingAsync(probe, deadline.Token).ConfigureAwait(false) ?? identity;
+                    if (detector is FtpServiceDetector && (targeted || identity is not null))
+                    {
+                        var confirmed = await FtpServiceDetector.ConfirmAmbiguousGreetingAsync(probe, deadline.Token).ConfigureAwait(false);
+                        if (confirmed is not null)
+                            identity = confirmed with { Product = identity?.Product, Version = identity?.Version };
+                    }
                     cancellationToken.ThrowIfCancellationRequested();
                     if (identity is not null) return identity;
                 }

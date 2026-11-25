@@ -24,7 +24,12 @@ public sealed record AuditRow(Guid SessionId, AuditTarget Target, int Port, Serv
 {
     public Guid AuditId { get; init; }
     public IReadOnlyList<HttpSiteResult> HttpSites { get; init; } = [];
+    public bool HasConfirmedHttp => Protocol == "HTTP" && TargetServiceMatcher.IsConfirmed(Service);
     public bool HasFoundSite => HttpSites.Any(s => s.IsFound);
+    public bool HasFileService => TargetServiceMatcher.Family(Protocol) is "SMB" or "FTP" && TargetServiceMatcher.IsConfirmed(Service);
+    public bool HighlightResult => HasFoundSite || HasFileService;
+    public string CatalogSummary { get; init; } = "Каталог не открыт";
+    public string DiscoveredResources => HasFileService ? CatalogSummary : SiteSummary;
     public string SiteSummary => HttpSites.Count > 0 ? string.Join("; ", HttpSites.Select(s => s.Summary)) : "Проверка не проводилась";
     public string Address => Target.Address.ToString();
     public string Name => Target.Name;

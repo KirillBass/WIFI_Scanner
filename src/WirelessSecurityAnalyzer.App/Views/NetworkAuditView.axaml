@@ -5,25 +5,25 @@
   <UserControl.Resources><controls:SiteRowBrushConverter x:Key="SiteRowBrush" /></UserControl.Resources>
   <UserControl.Styles>
     <Style Selector="TableView#AuditResultsTable TableViewRow">
-      <Setter Property="Background" Value="{ReflectionBinding HasFoundSite, Converter={StaticResource SiteRowBrush}}" />
+      <Setter Property="Background" Value="{ReflectionBinding HighlightResult, Converter={StaticResource SiteRowBrush}}" />
     </Style>
     <Style Selector="TableView#AuditResultsTable TableViewRow:selected">
-      <Setter Property="Background" Value="{ReflectionBinding HasFoundSite, Converter={StaticResource SiteRowBrush}, ConverterParameter=selected}" />
+      <Setter Property="Background" Value="{ReflectionBinding HighlightResult, Converter={StaticResource SiteRowBrush}, ConverterParameter=selected}" />
     </Style>
     <Style Selector="TableView#AuditResultsTable TableViewRow:selected /template/ Border#Border">
-      <Setter Property="Background" Value="{ReflectionBinding HasFoundSite, Converter={StaticResource SiteRowBrush}, ConverterParameter=selected}" />
+      <Setter Property="Background" Value="{ReflectionBinding HighlightResult, Converter={StaticResource SiteRowBrush}, ConverterParameter=selected}" />
     </Style>
     <Style Selector="TableView#AuditResultsTable TableViewRow:pointerover /template/ Border#Border">
-      <Setter Property="Background" Value="{ReflectionBinding HasFoundSite, Converter={StaticResource SiteRowBrush}, ConverterParameter=pointer}" />
+      <Setter Property="Background" Value="{ReflectionBinding HighlightResult, Converter={StaticResource SiteRowBrush}, ConverterParameter=pointer}" />
     </Style>
     <Style Selector="TableView#AuditResultsTable TableViewRow:pressed /template/ Border#Border">
-      <Setter Property="Background" Value="{ReflectionBinding HasFoundSite, Converter={StaticResource SiteRowBrush}, ConverterParameter=pressed}" />
+      <Setter Property="Background" Value="{ReflectionBinding HighlightResult, Converter={StaticResource SiteRowBrush}, ConverterParameter=pressed}" />
     </Style>
     <Style Selector="TableView#AuditResultsTable TableViewRow:selected:pointerover /template/ Border#Border">
-      <Setter Property="Background" Value="{ReflectionBinding HasFoundSite, Converter={StaticResource SiteRowBrush}, ConverterParameter=selected-pointer}" />
+      <Setter Property="Background" Value="{ReflectionBinding HighlightResult, Converter={StaticResource SiteRowBrush}, ConverterParameter=selected-pointer}" />
     </Style>
     <Style Selector="TableView#AuditResultsTable TableViewRow:selected:pressed /template/ Border#Border">
-      <Setter Property="Background" Value="{ReflectionBinding HasFoundSite, Converter={StaticResource SiteRowBrush}, ConverterParameter=selected-pressed}" />
+      <Setter Property="Background" Value="{ReflectionBinding HighlightResult, Converter={StaticResource SiteRowBrush}, ConverterParameter=selected-pressed}" />
     </Style>
   </UserControl.Styles>
   <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="8">
@@ -80,17 +80,20 @@
               <TableViewColumn Header="Порт" Binding="{ReflectionBinding Port}" Width="60" />
               <TableViewColumn Header="Протокол" Binding="{ReflectionBinding Protocol}" Width="85" />
               <TableViewColumn Header="Продукт" Binding="{ReflectionBinding Product}" Width="140" />
-              <TableViewColumn Header="HTTP-сайт / страницы" Binding="{ReflectionBinding SiteSummary}" Width="290" />
+              <TableViewColumn Header="Обнаруженные ресурсы" Binding="{ReflectionBinding DiscoveredResources}" Width="290" />
             </TableView.Columns>
           </TableView>
           <TextBlock Text="{Binding EmptyResultsText}" IsVisible="{Binding IsResultsEmpty}" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20" MaxWidth="560" />
         </Grid>
       </Border>
       <Border x:Name="AuditDetailsPanel" Classes="card" IsVisible="{Binding IsDetailsExpanded}" ClipToBounds="True">
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-          <StackPanel Spacing="8">
+        <Grid RowDefinitions="Auto,*" RowSpacing="8">
+          <StackPanel Spacing="5">
             <TextBlock Text="{Binding SelectionHeading}" Classes="section" TextWrapping="Wrap" />
             <TextBlock Text="{Binding SelectionProduct}" TextWrapping="Wrap" />
+          </StackPanel>
+          <ScrollViewer Grid.Row="1" IsVisible="{Binding !HasFileService}" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+          <StackPanel Spacing="8">
             <TextBlock Text="{Binding SelectionStatus}" Classes="subtitle" />
             <TextBlock Text="{Binding HttpAvailabilityText}" IsVisible="{Binding !HasSites}" Classes="subtitle" />
             <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding HasMultipleSites}" ColumnSpacing="8">
@@ -107,7 +110,53 @@
               <TextBox x:Name="HttpResponseTextBox" Text="{Binding HttpResponseText}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Consolas, monospace" TextWrapping="Wrap" Height="150" ScrollViewer.VerticalScrollBarVisibility="Auto" />
             </StackPanel>
           </StackPanel>
-        </ScrollViewer>
+          </ScrollViewer>
+          <Grid Grid.Row="1" IsVisible="{Binding HasFileService}" RowDefinitions="Auto,*" RowSpacing="8">
+            <TextBlock Text="{Binding FileServiceEvidence}" TextWrapping="Wrap" Classes="subtitle" />
+            <Grid Grid.Row="1" DataContext="{Binding Catalog}" x:DataType="vm:ResourceCatalogViewModel" RowDefinitions="Auto,*,Auto" RowSpacing="8">
+              <StackPanel Spacing="6">
+                <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+                <ProgressBar IsVisible="{Binding IsWorking}" IsIndeterminate="True" Height="3" />
+                <StackPanel IsVisible="{Binding IsExpanded}" Spacing="6">
+                  <StackPanel IsEnabled="{Binding !IsWorking}" Spacing="6">
+                    <TextBox Text="{Binding SharePath}" IsVisible="{Binding IsSmb}" PlaceholderText="UNC-путь общей папки" />
+                    <ComboBox ItemsSource="{Binding LoginModes}" SelectedIndex="{Binding LoginMode}" HorizontalAlignment="Stretch" />
+                    <Grid IsVisible="{Binding HasNamedLogin}" ColumnDefinitions="*,*" ColumnSpacing="6">
+                      <TextBox Text="{Binding UserName}" PlaceholderText="Пользователь" />
+                      <TextBox Grid.Column="1" Text="{Binding Password}" PasswordChar="●" PlaceholderText="Пароль" />
+                    </Grid>
+                    <CheckBox IsChecked="{Binding AllowPlaintext}" IsVisible="{Binding NeedsPlaintextConsent}">
+                      <TextBlock Text="Разрешаю передать данные по FTP без шифрования" TextWrapping="Wrap" />
+                    </CheckBox>
+                    <WrapPanel ItemSpacing="6" LineSpacing="5">
+                      <Button Content="Открыть ресурс" Command="{Binding ReadRootCommand}" IsEnabled="{Binding CanRead}" />
+                      <Button Content="Обновить" Command="{Binding RefreshCatalogCommand}" IsEnabled="{Binding CanRead}" />
+                      <Button Content="Вверх" Command="{Binding ParentFolderCommand}" IsEnabled="{Binding CanGoUp}" />
+                    </WrapPanel>
+                  </StackPanel>
+                  <SelectableTextBlock Text="{Binding CurrentPath}" TextWrapping="Wrap" />
+                </StackPanel>
+              </StackPanel>
+              <TableView Grid.Row="1" IsVisible="{Binding IsExpanded}" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry, Mode=TwoWay}" CanUserResizeColumns="True">
+                <TableView.Columns>
+                  <TableViewColumn Header="Имя" Binding="{ReflectionBinding Name}" Width="170" />
+                  <TableViewColumn Header="Тип" Binding="{ReflectionBinding KindText}" Width="65" />
+                  <TableViewColumn Header="Байт" Binding="{ReflectionBinding SizeText}" Width="80" />
+                  <TableViewColumn Header="Изменён" Binding="{ReflectionBinding ModifiedText}" Width="125" />
+                  <TableViewColumn Header="Доступ" Binding="{ReflectionBinding AccessText}" Width="140" />
+                </TableView.Columns>
+              </TableView>
+              <StackPanel Grid.Row="2" IsVisible="{Binding IsExpanded}" Spacing="5">
+                <WrapPanel ItemSpacing="6" LineSpacing="5">
+                  <Button Content="Открыть папку" Command="{Binding OpenFolderCommand}" IsEnabled="{Binding CanOpenFolder}" />
+                  <Button Content="Копировать путь" Click="CopyResourcePath" />
+                  <Button Content="Остановить" Command="{Binding CancelCatalogueCommand}" IsEnabled="{Binding IsWorking}" />
+                </WrapPanel>
+                <TextBlock Text="{Binding Counts}" TextWrapping="Wrap" Classes="subtitle" />
+              </StackPanel>
+            </Grid>
+          </Grid>
+        </Grid>
       </Border>
     </Grid>
   </Grid>

@@ -23,8 +23,8 @@ public sealed class WindowsLocalNetworkService(ILogger logger) : ILocalNetworkSe
                 try
                 {
                     var properties = adapter.GetIPProperties();
-                    var index = properties.GetIPv4Properties()?.Index;
-                    if (index is null or <= 0) continue;
+                    var index = GetIpv4Index(adapter, properties);
+                    if (index is null) continue;
                     var gateways = properties.GatewayAddresses.Select(g => g.Address)
                         .Where(SubnetCalculator.IsUsableUnicast).OrderBy(SubnetCalculator.ToUInt32).ToArray();
                     foreach (var unicast in properties.UnicastAddresses.Where(a =>
@@ -53,6 +53,21 @@ public sealed class WindowsLocalNetworkService(ILogger logger) : ILocalNetworkSe
             .ThenByDescending(n => n.IsWireless).ThenBy(n => n.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(n => n.InterfaceId, StringComparer.OrdinalIgnoreCase)
             .ThenBy(n => SubnetCalculator.ToUInt32(n.LocalIpv4)).ToArray());
+
+    internal static int? GetIpv4Index(NetworkInterface adapter, IPInterfaceProperties properties)
+    {
+        try
+        {
+            if (!adapter.Supports(NetworkInterfaceComponent.IPv4)) return null;
+            var index = properties.GetIPv4Properties()?.Index;
+            return index is > 0 ? index : null;
+        }
+        catch (NetworkInformationException exception) when (exception.NativeErrorCode == (int)SocketError.ProtocolNotSupported)
+        {
+            // Some Windows adapters cannot expose IPv4 properties even when listed as active.
+            return null;
+        }
+    }
 
     internal static void EnsureWindows()
     {

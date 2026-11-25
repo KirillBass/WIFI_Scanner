@@ -22,10 +22,14 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     private readonly object _dispatchGate = new();
     private AuditSnapshot? _pendingSnapshot;
     private bool _updateQueued;
+    private bool _synchronizingRows;
     public NetworkAuditViewModel(NetworkSessionViewModel session, DevicesViewModel devices, IWifiConnectionService connections,
-        INetworkAuditService? audit = null, LoggingSettingsService? preferences = null)
+        INetworkAuditService? audit = null, LoggingSettingsService? preferences = null,
+        IEnumerable<IResourceCatalogReader>? catalogReaders = null, ILocalNetworkService? networks = null)
     {
         Session = session; Devices = devices; _connections = connections; _audit = audit;
+        Catalog = new(catalogReaders ?? [], networks);
+        Catalog.SummaryChanged += FilterRows;
         _selectedProfileIndex = 0;
         _includeLocal = preferences?.UserPreferences.IncludeLocal ?? true;
         Session.PropertyChanged += OnStateChanged; Devices.PropertyChanged += OnStateChanged;
@@ -33,6 +37,9 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     }
     public NetworkSessionViewModel Session { get; }
     public DevicesViewModel Devices { get; }
+    public ResourceCatalogViewModel Catalog { get; }
+    public bool HasFileService => SelectedRow?.HasFileService == true;
+    public string FileServiceEvidence => HasFileService ? SelectedRow!.Service.Evidence : "";
     public bool HasAudit => _snapshot.AuditId != Guid.Empty;
     public string PrimaryActionText => IsAuditing ? "Остановить" : Session.IsObtainingAddress ? "Получение IPv4…" : "Найти серверы";
     public string ReadinessText => IsAuditing ? "" : Session.IsObtainingAddress ? "Wi-Fi подключён. Дождитесь получения IPv4; при необходимости отмените подключение." :
@@ -43,10 +50,28 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     public bool HasReadinessMessage => ReadinessText.Length > 0;
     public string ContextSummary => Session.IsReady ? $"{Session.InterfaceName} · {Session.Ipv4}/{Session.Current.PrefixLength}" : "Сеть не выбрана";
     public bool ShowAuditStatus => Session.IsReady || HasAudit || StatusText != "Аудит ещё не запускался.";
-    public string AuditNotice => _snapshot.Stage != AuditStage.Completed ? "" :
-        _snapshot.Hosts.Any(h => h.IsPartial) || _snapshot.Progress.Errors > 0 ? "Есть неполные проверки или ошибки. Подробности сохранены в журнале." :
-        _allRows.Any(r => r.HttpSites.Any(s => s.IsPartial || s.State is HttpSiteState.AccessRestricted or HttpSiteState.ConnectionError)) ?
-            "Часть HTTP-результатов ограничена или не завершена. Выберите службу для подробностей." : "";
+    public string AuditNotice
+    {
+        get
+        {
+            if (_snapshot.Stage != AuditStage.Completed) return "";
+            var progress = _snapshot.Progress;
+            var reasons = new List<string>();
+            if (progress.TimedOut > 0) reasons.Add($"без ответа ({progress.TimedOut})");
+            if (progress.Unavailable > 0) reasons.Add($"недоступно ({progress.Unavailable})");
+            if (progress.Errors > 0) reasons.Add($"ошибки ({progress.Errors})");
+            var unconfirmed = _allRows.Count(r => r.Service.Confidence != ServiceConfidence.High);
+            if (unconfirmed > 0) reasons.Add($"протокол не подтверждён ({unconfirmed})");
+
+            var tcpNotice = reasons.Count > 0 ? $"Неполные сетевые проверки: {string.Join(", ", reasons)}." :
+                _snapshot.Hosts.Any(h => h.IsPartial) ? "Часть сетевых проверок не завершена." : "";
+            if (!_allRows.Any(r => r.HttpSites.Any(s => s.IsPartial || s.State is HttpSiteState.AccessRestricted or HttpSiteState.ConnectionError)))
+                return tcpNotice;
+
+            const string httpNotice = "Есть ограничения при проверке HTTP-страниц. Выберите службу для подробностей.";
+            return tcpNotice.Length == 0 ? httpNotice : tcpNotice + " " + httpNotice;
+        }
+    }
     public bool HasAuditNotice => AuditNotice.Length > 0;
     public string CompactStatus => _snapshot.Stage switch
     {
@@ -137,7 +162,13 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         var index = SelectedSites.ToList().IndexOf(SelectedSite!);
         SelectedSite = SelectedSites[(index + offset + SelectedSites.Count) % SelectedSites.Count];
     }
-    public string HttpAvailabilityText => HasSites ? "" : SelectedRow?.Protocol == "HTTPS" ? "Служба HTTPS распознана. Обход HTTPS-страниц не поддерживается." : "Подтверждённых HTTP-сайтов у этой службы нет.";
+    public string HttpAvailabilityText => HasSites ? "" : SelectedRow?.Protocol switch
+    {
+        "HTTP" => "Результаты проверки HTTP-страниц пока не получены.",
+        "HTTPS" => "Служба HTTPS распознана. Обход HTTPS-страниц не поддерживается.",
+        null => "",
+        _ => "Поиск HTTP-страниц для этой службы не выполнялся."
+    };
     public IReadOnlyList<HttpSiteResult> SelectedSites => SelectedRow?.HttpSites ?? [];
     public bool HasSites => SelectedSites.Count > 0;
     public IReadOnlyList<HttpPage> SelectedPages => SelectedSite?.Pages ?? [];
@@ -187,6 +218,8 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     private HttpSiteResult? _selectedSite;
     partial void OnSelectedRowChanged(AuditRow? value)
     {
+        if (_synchronizingRows) return;
+        Catalog.Select(value, Session.Current.Network);
         if (value is null) IsDetailsExpanded = false;
         if (value is not null && _detailEndpoint != (value.Address, value.Port)) IsDetailsExpanded = true;
         _detailEndpoint = value is null ? null : (value.Address, value.Port);
@@ -196,12 +229,16 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(SelectedSites)); OnPropertyChanged(nameof(HasSites)); OnPropertyChanged(nameof(HasMultipleSites));
         PreviousSiteCommand.NotifyCanExecuteChanged(); NextSiteCommand.NotifyCanExecuteChanged();
         SelectedSite = value?.HttpSites.FirstOrDefault(s => s.Origin == origin) ?? value?.HttpSites.FirstOrDefault();
-        foreach (var name in new[] { nameof(HasSelection), nameof(SelectionHeading), nameof(SelectionProduct), nameof(HttpAvailabilityText), nameof(SelectionStatus), nameof(SitePosition) }) OnPropertyChanged(name);
+        foreach (var name in new[] { nameof(HasSelection), nameof(SelectionHeading), nameof(SelectionProduct), nameof(HttpAvailabilityText), nameof(SelectionStatus), nameof(SitePosition), nameof(HasFileService), nameof(FileServiceEvidence) }) OnPropertyChanged(name);
         ToggleDetailsCommand.NotifyCanExecuteChanged();
     }
     private bool CanToggleDetails() => HasSelection;
     [RelayCommand(CanExecute = nameof(CanToggleDetails))]
-    private void ToggleDetails() { if (HasSelection) IsDetailsExpanded = !IsDetailsExpanded; }
+    private void ToggleDetails()
+    {
+        if (HasFileService) Catalog.IsExpanded = !Catalog.IsExpanded;
+        else if (HasSelection) IsDetailsExpanded = !IsDetailsExpanded;
+    }
     private bool CanOpenSite() => SelectedSite is { HttpConfirmed: true } site && Uri.TryCreate(site.Url, UriKind.Absolute, out var uri) && uri.Scheme == "http" && uri.UserInfo.Length == 0;
     private (string Address, int Port)? _detailEndpoint;
     [RelayCommand(CanExecute = nameof(CanOpenSite))]
@@ -315,6 +352,7 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         ProgressText = $"Устройства: {p.HostsCompleted}/{p.HostsTotal} · TCP-порты: {p.Checked}/{p.Total} · Открыто: {p.Open} · Служб подтверждено: {p.Identified}\nЗакрыто: {p.Closed} · Таймаут: {p.TimedOut} · Недоступно: {p.Unavailable} · Ошибки: {p.Errors} · Время: {p.Elapsed:hh\\:mm\\:ss}";
         // A queued update from the previous session must not put old rows back into the UI.
         _snapshot = snapshot.SessionId == Session.Current.SessionId && Session.IsReady ? snapshot : AuditSnapshot.Empty;
+        Catalog.SetScope(_snapshot.AuditId);
         var selectedAddress = SelectedFullScanTarget?.Address;
         FullScanTargets = _snapshot.Hosts.Where(h => h.SessionId == _snapshot.SessionId && h.AuditId == _snapshot.AuditId).Select(h => h.Target).ToArray();
         SelectedFullScanTarget = FullScanTargets.FirstOrDefault(t => t.Address.Equals(selectedAddress));
@@ -337,19 +375,27 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         var rows = _allRows.Where(r => (!IsTargetOnly || TargetServiceMatcher.Matches(r, _snapshot.SessionId, _snapshot.AuditId)) && valid && (port == 0 || r.Port == port) &&
             (service.Length == 0 || (service == "SMB" ? r.Protocol.StartsWith("SMB", StringComparison.Ordinal) : r.Protocol == service)) &&
             (search.Length == 0 || $"{r.Address} {r.Name} {r.Protocol} {r.Product} {r.Version}".Contains(search, StringComparison.OrdinalIgnoreCase)))
-            .OrderByDescending(r => r.HasFoundSite).ThenBy(r => Convert.ToHexString(r.Target.Address.GetAddressBytes()), StringComparer.Ordinal).ThenBy(r => r.Port).ToArray();
-        SynchronizeRows(Rows, rows);
+            .OrderByDescending(r => r.HighlightResult).ThenByDescending(r => r.HasFoundSite)
+            .ThenBy(r => Convert.ToHexString(r.Target.Address.GetAddressBytes()), StringComparer.Ordinal).ThenBy(r => r.Port)
+            .Select(r => r.HasFileService && Catalog.Summary(r) != r.CatalogSummary
+                ? r with { CatalogSummary = Catalog.Summary(r) } : r).ToArray();
+        var selectedResult = selected is null ? null : rows.FirstOrDefault(r => r.AuditId == selected.AuditId &&
+            r.Target.Address.Equals(selected.Target.Address) && r.Port == selected.Port);
+        _synchronizingRows = true;
+        try { SynchronizeRows(Rows, rows); }
+        finally { _synchronizingRows = false; }
         var addresses = rows.Select(r => r.Target.Address).ToHashSet();
         var hasEndpointFilter = search.Length > 0 || portText.Length > 0 || service.Length > 0;
         SynchronizeRows(Hosts, _snapshot.Hosts.Where(h => h.SessionId == _snapshot.SessionId && h.AuditId == _snapshot.AuditId &&
             (!IsTargetOnly || h.HasMatch) && (!hasEndpointFilter || addresses.Contains(h.Target.Address))).ToArray());
         OnPropertyChanged(nameof(IsResultsEmpty)); OnPropertyChanged(nameof(EmptyResultsText));
-        SelectedRow = selected is null ? null : rows.FirstOrDefault(r => r.Target.Address.Equals(selected.Target.Address) && r.Port == selected.Port);
+        SelectedRow = selectedResult is null ? null : Rows.FirstOrDefault(r => r.Equals(selectedResult));
         if (SelectedRow is not null && selected is not null)
         {
             IsDetailsExpanded = detailsExpanded;
             SelectedSite = SelectedSites.FirstOrDefault(site => site.Origin == selectedOrigin) ?? SelectedSites.FirstOrDefault();
         }
+        else if (SelectedRow is null) { Catalog.Select(null, null); IsDetailsExpanded = false; }
         OnPropertyChanged(nameof(ResultCount));
     }
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
@@ -364,6 +410,8 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         if (_disposed) return; _disposed = true;
+        Catalog.Stop();
+        Catalog.SummaryChanged -= FilterRows;
         Session.PropertyChanged -= OnStateChanged; Devices.PropertyChanged -= OnStateChanged;
         if (_audit is not null) { _audit.Updated -= OnAuditUpdated; _ = _audit.StopAsync(); }
     }
