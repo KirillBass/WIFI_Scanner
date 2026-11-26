@@ -24,6 +24,10 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
     public ObservableCollection<ResourceEntry> Entries { get; } = [];
     public bool IsSmb => _endpoint?.HasSmbService == true;
     public bool IsFtp => _endpoint?.Protocol == "FTP";
+    public bool ShowsFtpStart => IsExpanded && IsFtp && !HasOpenedFtpDirectory;
+    public string FtpRootAddress => _endpoint is { Protocol: "FTP" } ftp ? $"ftp://{ftp.Address}:{ftp.Port}/" : "";
+    public bool ShowsCatalogStatus => HasOpenedFtpDirectory || _openedSmbShare is not null;
+    public bool ShowsDirectory => IsExpanded && ShowsCatalogStatus;
     public IReadOnlyList<string> LoginModes { get; } = ["Anonymous FTP", "Учётная запись FTP"];
     public IReadOnlyList<string> SmbLoginModes { get; } = ["Учётная запись Windows", "Другая учётная запись"];
     public bool HasNamedLogin => LoginMode == 1;
@@ -32,7 +36,9 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
     public bool CanGoUp => !IsWorking && _folders.Length > 0;
     public bool CanRead => !IsWorking && _endpoint is not null && _network is not null && (!IsSmb || _openedSmbShare is not null);
 
-    [ObservableProperty] private bool _isExpanded;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowsFtpStart))] private bool _isExpanded;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowsFtpStart), nameof(ShowsCatalogStatus), nameof(ShowsDirectory))]
+    private bool _hasOpenedFtpDirectory;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasNamedLogin), nameof(NeedsPlaintextConsent))]
     private int _loginMode;
     [ObservableProperty] private string _userName = "";
@@ -97,9 +103,10 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
         _network = network;
         _smbListing = null;
         ResetDirectory();
-        IsExpanded = IsSmb;
+        IsExpanded = IsSmb || IsFtp;
         LoginMode = 0;
         UserName = Password = "";
+        if (IsFtp) AllowPlaintext = false;
         OnPropertyChanged(nameof(IsSmb));
         OnPropertyChanged(nameof(IsFtp));
         OnPropertyChanged(nameof(NeedsPlaintextConsent));
@@ -107,7 +114,9 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
         OnPropertyChanged(nameof(CanRead));
 
         RestoreSmbListing();
-        Status = IsFtp ? Summary(endpoint!) : "";
+        Status = IsFtp ? "Доступ не проверен" : "";
+        OnPropertyChanged(nameof(FtpRootAddress));
+        OnPropertyChanged(nameof(ShowsFtpStart));
     }
 
     public void Stop() => _operation?.Cancel();
@@ -181,6 +190,7 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
                 }
             }
             Counts = $"Папок: {folderCount:N0} · файлов: {fileCount:N0} · ссылок: {linkCount:N0}";
+            if (IsFtp) HasOpenedFtpDirectory = true;
         }
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
@@ -203,6 +213,8 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
                 if (generation != _generation) return;
                 if (result.Root.Length > 0) _root = result.Root;
                 if (result.Path.Length > 0) CurrentPath = result.Path;
+                if (IsFtp && result is { Access: ResourceAccess.Granted, State: CatalogState.Complete })
+                    HasOpenedFtpDirectory = true;
                 if (smbShare is not null && folders.Length == 0)
                     SetSmbShareAccess(endpoint, smbShare, result.Access);
                 summary = result.State == CatalogState.Complete && Entries.Count > 0 ? Counts :
@@ -245,6 +257,7 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
 
     private void ResetDirectory()
     {
+        HasOpenedFtpDirectory = false;
         _openedSmbShare = null;
         SelectedSmbShare = null;
         _folders = [];

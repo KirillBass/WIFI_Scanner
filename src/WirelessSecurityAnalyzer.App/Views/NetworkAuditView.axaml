@@ -90,8 +90,8 @@
         <Grid RowDefinitions="Auto,*" RowSpacing="8">
           <StackPanel Spacing="5">
             <TextBlock Text="{Binding SelectionHeading}" Classes="section" TextWrapping="Wrap" />
-            <TextBlock Text="{Binding SelectionProduct}" TextWrapping="Wrap" />
-            <TextBlock Text="Служба подтверждена" IsVisible="{Binding HasSmbService}" Foreground="{DynamicResource SignalBrush}" />
+            <TextBlock Text="{Binding SelectionProduct}" IsVisible="{Binding ShowsSelectionProduct}" TextWrapping="Wrap" />
+            <TextBlock Text="Служба подтверждена" IsVisible="{Binding HasFileService}" Foreground="{DynamicResource SignalBrush}" />
           </StackPanel>
           <ScrollViewer Grid.Row="1" IsVisible="{Binding !HasFileService}" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
           <StackPanel Spacing="8">
@@ -113,7 +113,6 @@
           </StackPanel>
           </ScrollViewer>
           <Grid Grid.Row="1" IsVisible="{Binding HasFileService}" RowDefinitions="Auto,*" RowSpacing="8">
-            <TextBlock Text="{Binding FileServiceEvidence}" IsVisible="{Binding ShowFtpEvidence}" TextWrapping="Wrap" Classes="subtitle" />
             <Grid Grid.Row="1" DataContext="{Binding Catalog}" x:DataType="vm:ResourceCatalogViewModel">
               <Grid x:Name="SmbSharePanel" IsVisible="{Binding ShowsSmbShares}" RowDefinitions="Auto,*,Auto" RowSpacing="8">
                 <StackPanel Spacing="6">
@@ -162,6 +161,32 @@
                   </WrapPanel>
                 </StackPanel>
               </Grid>
+              <ScrollViewer x:Name="FtpStartPanel" IsVisible="{Binding ShowsFtpStart}" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="6">
+                  <Border Classes="card">
+                    <StackPanel Spacing="3">
+                      <TextBlock Text="Корневой каталог" Classes="section" />
+                      <SelectableTextBlock Text="{Binding FtpRootAddress}" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding Status}" Classes="subtitle" />
+                    </StackPanel>
+                  </Border>
+                  <ProgressBar IsVisible="{Binding IsWorking}" IsIndeterminate="True" Height="3" />
+                  <StackPanel Spacing="6" IsEnabled="{Binding !IsWorking}">
+                    <ComboBox ItemsSource="{Binding LoginModes}" SelectedIndex="{Binding LoginMode}" HorizontalAlignment="Stretch" />
+                    <Grid IsVisible="{Binding HasNamedLogin}" ColumnDefinitions="*,*" ColumnSpacing="6">
+                      <TextBox Text="{Binding UserName}" PlaceholderText="Пользователь" />
+                      <TextBox Text="{Binding Password}" Grid.Column="1" PasswordChar="●" PlaceholderText="Пароль" />
+                    </Grid>
+                    <CheckBox IsChecked="{Binding AllowPlaintext}" IsVisible="{Binding NeedsPlaintextConsent}">
+                      <TextBlock Text="Разрешаю передать данные по FTP без шифрования" TextWrapping="Wrap" />
+                    </CheckBox>
+                  </StackPanel>
+                  <WrapPanel ItemSpacing="6" LineSpacing="5">
+                    <Button Content="Открыть ресурс" Command="{Binding ReadRootCommand}" IsEnabled="{Binding CanRead}" />
+                    <Button Content="Остановить" Command="{Binding CancelCatalogueCommand}" IsVisible="{Binding IsWorking}" />
+                  </WrapPanel>
+                </StackPanel>
+              </ScrollViewer>
               <Grid IsVisible="{Binding ShowsCatalogStatus}" RowDefinitions="Auto,*,Auto" RowSpacing="8">
                 <StackPanel Spacing="6">
                   <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />

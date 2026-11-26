@@ -45,8 +45,6 @@ public sealed partial class ResourceCatalogViewModel
     private SmbShare? _openedSmbShare;
 
     public bool ShowsSmbShares => IsExpanded && IsSmb && _openedSmbShare is null;
-    public bool ShowsDirectory => IsExpanded && (IsFtp || _openedSmbShare is not null);
-    public bool ShowsCatalogStatus => IsFtp || _openedSmbShare is not null;
     public bool CanListSmbShares => ShowsSmbShares && !IsWorking && _endpoint?.Port == 445 &&
         _network is not null && smbShares is not null;
     public bool CanChooseSmbShare => ShowsSmbShares && !IsWorking && !IsSmbAccountEditorOpen && _smbListing?.HasList == true;

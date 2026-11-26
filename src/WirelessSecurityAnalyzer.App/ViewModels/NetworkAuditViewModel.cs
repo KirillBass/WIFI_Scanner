@@ -40,9 +40,8 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     public DevicesViewModel Devices { get; }
     public ResourceCatalogViewModel Catalog { get; }
     public bool HasFileService => SelectedRow?.HasFileService == true;
-    public bool HasSmbService => SelectedRow?.HasSmbService == true;
-    public bool ShowFtpEvidence => HasFileService && !HasSmbService;
-    public string FileServiceEvidence => ShowFtpEvidence ? SelectedRow!.Service.Evidence : "";
+    public bool ShowsSelectionProduct => SelectedRow is not { HasFileService: true, Protocol: "FTP" } ftp ||
+        !string.IsNullOrWhiteSpace(ftp.Service.Product) && ftp.Service.Product != "-";
     public bool HasAudit => _snapshot.AuditId != Guid.Empty;
     public string PrimaryActionText => IsAuditing ? "Остановить" : Session.IsObtainingAddress ? "Получение IPv4…" : "Найти серверы";
     public string ReadinessText => IsAuditing ? "" : Session.IsObtainingAddress ? "Wi-Fi подключён. Дождитесь получения IPv4; при необходимости отмените подключение." :
@@ -204,7 +203,7 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         if (_synchronizingRows) return;
         Catalog.Select(value, Session.Current.Network);
         if (value is null) IsDetailsExpanded = false;
-        if (value is not null && (value.HasSmbService || _detailEndpoint != (value.Address, value.Port)))
+        if (value is not null && (value.HasFileService || _detailEndpoint != (value.Address, value.Port)))
             IsDetailsExpanded = true;
         _detailEndpoint = value is null ? null : (value.Address, value.Port);
         if (value is not null) SelectedFullScanTarget = FullScanTargets.FirstOrDefault(t => t.Address.Equals(value.Target.Address));
@@ -213,19 +212,18 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(SelectedSites)); OnPropertyChanged(nameof(HasSites)); OnPropertyChanged(nameof(HasMultipleSites));
         PreviousSiteCommand.NotifyCanExecuteChanged(); NextSiteCommand.NotifyCanExecuteChanged();
         SelectedSite = value?.HttpSites.FirstOrDefault(s => s.Origin == origin) ?? value?.HttpSites.FirstOrDefault();
-        foreach (var name in new[] { nameof(HasSelection), nameof(SelectionHeading), nameof(SelectionProduct), nameof(HttpAvailabilityText), nameof(SelectionStatus), nameof(SitePosition), nameof(HasFileService), nameof(HasSmbService), nameof(ShowFtpEvidence), nameof(FileServiceEvidence) }) OnPropertyChanged(name);
+        foreach (var name in new[] { nameof(HasSelection), nameof(SelectionHeading), nameof(SelectionProduct), nameof(ShowsSelectionProduct), nameof(HttpAvailabilityText), nameof(SelectionStatus), nameof(SitePosition), nameof(HasFileService) }) OnPropertyChanged(name);
         ToggleDetailsCommand.NotifyCanExecuteChanged();
     }
     private bool CanToggleDetails() => HasSelection;
     [RelayCommand(CanExecute = nameof(CanToggleDetails))]
     private void ToggleDetails()
     {
-        if (HasSmbService)
+        if (HasFileService)
         {
             Catalog.IsExpanded = true;
             IsDetailsExpanded = true;
         }
-        else if (HasFileService) Catalog.IsExpanded = !Catalog.IsExpanded;
         else if (HasSelection) IsDetailsExpanded = !IsDetailsExpanded;
     }
     private bool CanOpenSite() => SelectedSite is { HttpConfirmed: true } site && Uri.TryCreate(site.Url, UriKind.Absolute, out var uri) && uri.Scheme == "http" && uri.UserInfo.Length == 0;
@@ -385,7 +383,7 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         SelectedRow = selectedResult is null ? null : Rows.FirstOrDefault(r => r.Equals(selectedResult));
         if (SelectedRow is not null && selected is not null)
         {
-            IsDetailsExpanded = SelectedRow.HasSmbService || detailsExpanded;
+            IsDetailsExpanded = SelectedRow.HasFileService || detailsExpanded;
             SelectedSite = SelectedSites.FirstOrDefault(site => site.Origin == selectedOrigin) ?? SelectedSites.FirstOrDefault();
         }
         else if (SelectedRow is null) { Catalog.Select(null, null); IsDetailsExpanded = false; }

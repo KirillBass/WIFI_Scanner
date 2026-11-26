@@ -29,7 +29,7 @@ public partial class NetworkAuditView : UserControl
         {
             Subscribe(false);
             Subscribe(true);
-            if (_viewModel?.HasSmbService == true) _viewModel.Catalog.IsExpanded = true;
+            if (_viewModel?.HasFileService == true) _viewModel.Catalog.IsExpanded = true;
             ArrangeDetails();
         };
     }
