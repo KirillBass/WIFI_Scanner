@@ -69,12 +69,10 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     public int DeviceCount => Session.Current.Network is { } network && Devices.SelectedNetwork?.HasSameContext(network) == true ? Devices.KnownCount : 0;
     public static IReadOnlyList<string> PortProfiles { get; } = ["Быстрый", "Стандартный", "Полный", "Пользовательский"];
     public IReadOnlyList<string> Profiles => PortProfiles;
-    public IReadOnlyList<string> ServiceFilters { get; } = ["Все службы", "HTTP", "HTTPS", "SSH", "FTP", "RDP", "SMB", "SMTP", "TLS", "Unknown"];
+    public IReadOnlyList<string> ServiceFilters { get; } = ["Все службы", "HTTP", "FTP", "SMB", "Unknown"];
     public ObservableCollection<AuditRow> Rows { get; } = [];
     public ObservableCollection<TargetHostSummary> Hosts { get; } = [];
     public IReadOnlyList<AuditTarget> FullScanTargets { get; private set; } = [];
-    public IReadOnlyList<string> DisplayModes { get; } = ["Все результаты", "Только SMB / FTP / Web"];
-    public bool IsTargetOnly => SelectedDisplayModeIndex == 1;
     public bool IsPreparingDiscovery => IsAuditing && _snapshot.Stage == AuditStage.Preparing && Devices.IsBusy;
     public bool IsResultsEmpty => Rows.Count == 0;
     public int MatchedHostCount => _snapshot.Hosts.Count(h => h.HasMatch);
@@ -97,13 +95,11 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
             return MatchedHostCount > 0 ? counts : "Не найдено подтверждённых SMB/FTP/HTTP/HTTPS-служб среди проверенных портов.";
         }
     }
-    public string EmptyResultsText => !HasAudit ? "Здесь появятся найденные службы и сайты." : IsTargetOnly ? MatchedHostCount > 0
-        ? "Нет целевых служб, соответствующих дополнительным фильтрам." : TargetStatusText
-        : _snapshot.AuditId == Guid.Empty ? "Аудит ещё не выполнялся." : _snapshot.IsRunning
-            ? "Проверка продолжается; результатов для отображения пока нет." : "Нет результатов для выбранных фильтров.";
+    public string EmptyResultsText => !HasAudit ? "Здесь появятся найденные службы и сайты." :
+        _allRows.Count == 0 && _snapshot.TargetServicesOnly ? TargetStatusText : _snapshot.IsRunning
+            ? "Проверка продолжается. Результатов для отображения пока нет." : "Нет результатов для выбранных фильтров.";
     public bool CanConfigure => !IsAuditing && !IsBusy && !Devices.IsBusy && !Devices.IsMonitoring;
     public bool HasError => ErrorMessage.Length > 0;
-    public bool HasFilterError => FilterError.Length > 0;
     public bool IsCustomProfile => SelectedProfileIndex == 3;
     public bool CanEditParameters => IsCustomProfile && CanConfigure;
     public bool EffectiveIncludeLocal => SelectedProfileIndex is 0 or 1 || IncludeLocal;
@@ -184,7 +180,6 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private bool _isDetailsExpanded;
     [ObservableProperty] private double _progressPercent;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(IsCustomProfile), nameof(IsFullProfile))] private int _selectedProfileIndex;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(IsTargetOnly))] private int _selectedDisplayModeIndex = 1;
     [ObservableProperty] private string _additionalTargetPorts = string.Empty;
     [ObservableProperty] private string _customPorts = "22,80,443,8000-8010";
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(FindAllSitesOnDeviceCommand))] private bool _includeLocal = true;
@@ -192,8 +187,6 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private int _concurrency = 64;
     [ObservableProperty] private int _connectTimeoutMs = 650;
     [ObservableProperty] private string _searchText = string.Empty;
-    [ObservableProperty] private string _portFilter = string.Empty;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasFilterError))] private string _filterError = string.Empty;
     [ObservableProperty] private int _selectedServiceIndex;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(SelectionDetails))] private AuditRow? _selectedRow;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(SelectedPages), nameof(SiteDetails), nameof(SiteStatus), nameof(SelectionProduct), nameof(SelectionStatus), nameof(HasHttpExchange), nameof(HttpRequestText), nameof(HttpResponseText), nameof(SiteAddress), nameof(SitePosition)), NotifyCanExecuteChangedFor(nameof(OpenSiteCommand))]
@@ -236,9 +229,7 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         { ErrorMessage = "Не удалось открыть системный браузер. Адрес: " + SiteAddress; }
     }
-    partial void OnSelectedDisplayModeIndexChanged(int value) => FilterRows();
     partial void OnSearchTextChanged(string value) => FilterRows();
-    partial void OnPortFilterChanged(string value) => FilterRows();
     partial void OnSelectedServiceIndexChanged(int value) => FilterRows();
     private bool CanRefreshDevices() => !_disposed && Session.IsReady && !IsBusy && !IsAuditing && !Devices.IsBusy && !Devices.IsMonitoring;
     private bool CanDisconnect() => !_disposed && Session.CanDisconnectWifi && !Session.IsConnecting && !IsBusy;
@@ -282,7 +273,6 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     {
         if (!CanStartAudit() || _audit is null) return;
         ErrorMessage = string.Empty;
-        SelectedDisplayModeIndex = 0;
         try { await _audit.RunAsync(new((PortProfile)SelectedProfileIndex, CustomPorts, EffectiveIncludeLocal, Concurrency, ConnectTimeoutMs)); }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { ErrorMessage = ex.Message; }
         catch (OperationCanceledException) { }
@@ -292,7 +282,6 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     {
         if (!CanStartAudit() || _audit is null || Session.Current.Network is not { } network) return;
         ErrorMessage = string.Empty;
-        SelectedDisplayModeIndex = 1;
         Devices.UseSessionNetwork(network);
         var profile = SelectedProfileIndex == 0 ? PortProfile.Targeted : (PortProfile)SelectedProfileIndex;
         try { await _audit.RunAsync(new(profile, profile == PortProfile.Custom ? CustomPorts : "", EffectiveIncludeLocal, Concurrency, ConnectTimeoutMs)
@@ -304,7 +293,7 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     private async Task FindAllSitesOnDeviceAsync()
     {
         if (!CanFindAllSitesOnDevice() || _audit is null || SelectedFullScanTarget is not { } target) return;
-        ErrorMessage = string.Empty; SelectedDisplayModeIndex = 1;
+        ErrorMessage = string.Empty;
         try { await _audit.RunAsync(new(PortProfile.Full, IncludeLocal: IncludeLocal, Concurrency: Concurrency, ConnectTimeoutMs: ConnectTimeoutMs)
             { TargetServicesOnly = true, TargetAddress = target.Address }); }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { ErrorMessage = ex.Message; }
@@ -354,14 +343,13 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
     {
         var selected = SelectedRow;
         var selectedOrigin = SelectedSite?.Origin; var detailsExpanded = IsDetailsExpanded;
-        var portText = PortFilter.Trim(); int port = 0;
-        var valid = portText.Length == 0 || int.TryParse(portText, NumberStyles.None, CultureInfo.InvariantCulture, out port) && port is >= 1 and <= 65535;
-        FilterError = valid ? "" : "Фильтр порта: число от 1 до 65535.";
         var service = SelectedServiceIndex > 0 && SelectedServiceIndex < ServiceFilters.Count ? ServiceFilters[SelectedServiceIndex] : "";
         var search = SearchText.Trim();
-        var rows = _allRows.Where(r => (!IsTargetOnly || TargetServiceMatcher.Matches(r, _snapshot.SessionId, _snapshot.AuditId)) && valid && (port == 0 || r.Port == port) &&
-            (service.Length == 0 || (service == "SMB" ? r.Protocol.StartsWith("SMB", StringComparison.Ordinal) : r.Protocol == service)) &&
-            (search.Length == 0 || $"{r.Address} {r.Name} {r.Protocol} {r.Product} {r.Version}".Contains(search, StringComparison.OrdinalIgnoreCase)))
+        var port = int.TryParse(search, NumberStyles.None, CultureInfo.InvariantCulture, out var candidate) &&
+            candidate is >= 1 and <= 65535 ? candidate : (int?)null;
+        var rows = _allRows.Where(r =>
+            (service.Length == 0 || (service == "SMB" ? TargetServiceMatcher.Family(r.Protocol) == "SMB" : r.Protocol == service)) &&
+            (search.Length == 0 || r.Port == port || $"{r.Address} {r.Name} {r.Protocol} {r.Product} {r.Version}".Contains(search, StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(r => r.HighlightResult).ThenByDescending(r => r.HasFoundSite)
             .ThenBy(r => Convert.ToHexString(r.Target.Address.GetAddressBytes()), StringComparer.Ordinal).ThenBy(r => r.Port)
             .Select(r =>
@@ -376,9 +364,9 @@ public sealed partial class NetworkAuditViewModel : ViewModelBase, IDisposable
         try { SynchronizeRows(Rows, rows); }
         finally { _synchronizingRows = false; }
         var addresses = rows.Select(r => r.Target.Address).ToHashSet();
-        var hasEndpointFilter = search.Length > 0 || portText.Length > 0 || service.Length > 0;
+        var hasEndpointFilter = search.Length > 0 || service.Length > 0;
         SynchronizeRows(Hosts, _snapshot.Hosts.Where(h => h.SessionId == _snapshot.SessionId && h.AuditId == _snapshot.AuditId &&
-            (!IsTargetOnly || h.HasMatch) && (!hasEndpointFilter || addresses.Contains(h.Target.Address))).ToArray());
+            (!hasEndpointFilter || addresses.Contains(h.Target.Address))).ToArray());
         OnPropertyChanged(nameof(IsResultsEmpty)); OnPropertyChanged(nameof(EmptyResultsText)); OnPropertyChanged(nameof(ShowDetailsHint));
         SelectedRow = selectedResult is null ? null : Rows.FirstOrDefault(r => r.Equals(selectedResult));
         if (SelectedRow is not null && selected is not null)

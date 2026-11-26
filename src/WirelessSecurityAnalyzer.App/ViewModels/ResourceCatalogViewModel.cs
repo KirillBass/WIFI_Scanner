@@ -12,7 +12,7 @@ namespace WirelessSecurityAnalyzer.App.ViewModels;
 public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalogReader> readers, ILocalNetworkService? networks,
     ISmbShareEnumerator? smbShares = null) : ViewModelBase
 {
-    private readonly Dictionary<(Guid Audit, string Address, int Port), string> _summaries = [];
+    private readonly Dictionary<(Guid Audit, string Address, int Port), string> _ftpRootSummaries = [];
     private AuditRow? _endpoint;
     private LocalNetworkInfo? _network;
     private CancellationTokenSource? _operation;
@@ -28,8 +28,8 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
     public string FtpRootAddress => _endpoint is { Protocol: "FTP" } ftp ? $"ftp://{ftp.Address}:{ftp.Port}/" : "";
     public bool ShowsCatalogStatus => HasOpenedFtpDirectory || _openedSmbShare is not null;
     public bool ShowsDirectory => IsExpanded && ShowsCatalogStatus;
-    public IReadOnlyList<string> LoginModes { get; } = ["Anonymous FTP", "Учётная запись FTP"];
-    public IReadOnlyList<string> SmbLoginModes { get; } = ["Учётная запись Windows", "Другая учётная запись"];
+    public IReadOnlyList<string> LoginModes { get; } = ["Анонимный доступ", "Учётная запись"];
+    public IReadOnlyList<string> SmbLoginModes { get; } = ["Текущая учётная запись", "Другая учётная запись"];
     public bool HasNamedLogin => LoginMode == 1;
     public bool NeedsPlaintextConsent => IsFtp && HasNamedLogin;
     public bool CanOpenFolder => !IsWorking && SelectedEntry?.Kind == ResourceEntryKind.Folder;
@@ -79,12 +79,12 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
     private static (Guid, string, int) Key(AuditRow row) => (row.AuditId, row.Address, row.Port);
     public string Summary(AuditRow row) => row.HasSmbService
         ? SmbSummary(row)
-        : _summaries.GetValueOrDefault(Key(row)) ?? "Каталог не открыт";
+        : _ftpRootSummaries.GetValueOrDefault(Key(row)) ?? "Каталог не открыт";
 
     public void SetScope(Guid auditId)
     {
-        foreach (var key in _summaries.Keys.Where(key => key.Audit != auditId).ToArray())
-            _summaries.Remove(key);
+        foreach (var key in _ftpRootSummaries.Keys.Where(key => key.Audit != auditId).ToArray())
+            _ftpRootSummaries.Remove(key);
         foreach (var key in _shareListings.Keys.Where(key => key.Audit != auditId).ToArray())
             _shareListings.Remove(key);
     }
@@ -140,6 +140,7 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
         if (!CanRead || _endpoint is not { } endpoint || _network is not { } network) return;
         var reader = readers.FirstOrDefault(r => r.Protocol == TargetServiceMatcher.Family(endpoint.Protocol));
         if (reader is null) return;
+        var isFtp = endpoint.Protocol == "FTP";
         if (NeedsPlaintextConsent && !AllowPlaintext)
         {
             Status = "Подтвердите использование обычного FTP для этой учётной записи.";
@@ -168,6 +169,8 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
         SelectedEntry = null;
         Status = "Читается список объектов…";
         Counts = "";
+        void UpdateCounts() => Counts = $"Папок: {folderCount:N0} · файлов: {fileCount:N0} · ссылок: {linkCount:N0}";
+
         void Flush()
         {
             ResourceEntry[] batch;
@@ -189,14 +192,15 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
                     default: linkCount++; break;
                 }
             }
-            Counts = $"Папок: {folderCount:N0} · файлов: {fileCount:N0} · ссылок: {linkCount:N0}";
-            if (IsFtp) HasOpenedFtpDirectory = true;
+            UpdateCounts();
+            if (isFtp) HasOpenedFtpDirectory = true;
         }
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
         timer.Tick += (_, _) => Flush();
         timer.Start();
         string summary;
+        var ftpListingComplete = false;
         try
         {
             if (networks is not null && !await networks.IsCurrentAsync(network, operation.Token))
@@ -213,8 +217,12 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
                 if (generation != _generation) return;
                 if (result.Root.Length > 0) _root = result.Root;
                 if (result.Path.Length > 0) CurrentPath = result.Path;
-                if (IsFtp && result is { Access: ResourceAccess.Granted, State: CatalogState.Complete })
+                if (isFtp && result is { Access: ResourceAccess.Granted, State: CatalogState.Complete })
+                {
+                    ftpListingComplete = true;
+                    UpdateCounts();
                     HasOpenedFtpDirectory = true;
+                }
                 if (smbShare is not null && folders.Length == 0)
                     SetSmbShareAccess(endpoint, smbShare, result.Access);
                 summary = result.State == CatalogState.Complete && Entries.Count > 0 ? Counts :
@@ -240,9 +248,11 @@ public sealed partial class ResourceCatalogViewModel(IEnumerable<IResourceCatalo
 
         if (generation != _generation) return;
         Status = summary;
-        if (!endpoint.HasSmbService)
+        if (isFtp && !ftpListingComplete && Counts.Length > 0)
+            Counts = "Получено частично · " + Counts;
+        if (isFtp && folders.Length == 0)
         {
-            _summaries[Key(endpoint)] = summary;
+            _ftpRootSummaries[Key(endpoint)] = "Корневой каталог · " + (ftpListingComplete ? Counts : summary);
             SummaryChanged?.Invoke();
         }
     }

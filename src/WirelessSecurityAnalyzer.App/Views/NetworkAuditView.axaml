@@ -61,14 +61,11 @@
       <TextBlock Text="{Binding CompactStatus}" IsVisible="{Binding ShowAuditStatus}" TextWrapping="Wrap" />
       <TextBlock Text="Выберите службу для подробностей." IsVisible="{Binding ShowDetailsHint}" Classes="subtitle" />
       <ProgressBar Value="{Binding ProgressPercent}" IsVisible="{Binding IsAuditing}" Minimum="0" Maximum="100" Height="3" />
-      <Grid ColumnDefinitions="*,190,120,75,Auto" ColumnSpacing="8">
-        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="IP, имя, служба или продукт" />
-        <ComboBox Grid.Column="1" ItemsSource="{Binding DisplayModes}" SelectedIndex="{Binding SelectedDisplayModeIndex}" HorizontalAlignment="Stretch" />
-        <ComboBox Grid.Column="2" ItemsSource="{Binding ServiceFilters}" SelectedIndex="{Binding SelectedServiceIndex}" HorizontalAlignment="Stretch" />
-        <TextBox Grid.Column="3" Text="{Binding PortFilter, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Порт" />
-        <Button Grid.Column="4" Content="Подробности" Command="{Binding ToggleDetailsCommand}" ToolTip.Tip="Сведения выбранной службы." />
+      <Grid ColumnDefinitions="*,120,Auto" ColumnSpacing="8">
+        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="IP, имя, порт, служба или продукт" />
+        <ComboBox Grid.Column="1" ItemsSource="{Binding ServiceFilters}" SelectedIndex="{Binding SelectedServiceIndex}" HorizontalAlignment="Stretch" />
+        <Button Grid.Column="2" Content="Подробности" Command="{Binding ToggleDetailsCommand}" ToolTip.Tip="Сведения выбранной службы." />
       </Grid>
-      <TextBlock Text="{Binding FilterError}" IsVisible="{Binding HasFilterError}" Foreground="{DynamicResource ErrorBrush}" />
     </StackPanel>
     <Grid Grid.Row="4" x:Name="ResultsLayout" ColumnDefinitions="*" RowDefinitions="*" ClipToBounds="True">
       <Border Classes="card" Padding="0" ClipToBounds="True">
